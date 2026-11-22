@@ -346,7 +346,7 @@ function demoState() {
   return s;
 }
 function newOrderShell(s, c, user) {
-  const portalNo = "WEB-" + pad(s.settings.next.portal++, 6);
+  const portalNo = Live.on ? newPortalNo() : "WEB-" + pad(s.settings.next.portal++, 6);
   return {
     portalNo, customerNo: c.no, createdBy: user ? user.name : "", createdAt: iso(Date.now()),
     header: { orderDate: today(), requestedDeliveryDate: addDays(Date.now(), 7).slice(0, 10), customerPO: "", contact: c.contact, email: c.email, phone: c.phone, shipTo: c.shipTo, billTo: c.billTo, terms: c.terms, location: c.location, priceGroup: c.priceGroup, notes: "" },
@@ -375,13 +375,13 @@ function stage(o) {
   if (o.invoice && o.invoice.remaining <= 0) return "paid";
   if (o.invoice) return "invoiced";
   if (o.shipments && o.shipments.length) return "shipped";
-  if (o.bc.status === "Released" && o.bc.reviewed === "Reviewed") return "confirmed";
+  if (o.bc.status === "Released" && (o.bc.reviewed === "Reviewed" || Live.on)) return "confirmed"; // Live interim: Released = confirmed until the Order reviewed field comes through the custom API
   return "submitted";
 }
 const STAGE_LABEL = { submitted: "Awaiting confirmation", confirmed: "Confirmed", shipped: "Shipped", invoiced: "To be paid", paid: "Paid", draft: "Draft" };
 const STAGES = ["submitted", "confirmed", "shipped", "invoiced", "paid"];
 const isOverdue = o => o.invoice && o.invoice.remaining > 0 && new Date(o.invoice.dueDate) < new Date();
-const editable = o => o.bc.soNo && o.bc.status === "Open" && !o.shipments.length && !o.invoice;
+const editable = o => !Live.on && o.bc.soNo && o.bc.status === "Open" && !o.shipments.length && !o.invoice;
 function pill(o) { const st = stage(o); if (st === "invoiced" && isOverdue(o)) return `<span class="pill st-overdue">Overdue</span>`; return `<span class="pill st-${st}">${STAGE_LABEL[st]}</span>`; }
 function pipe(o) { const i = STAGES.indexOf(stage(o)); return `<div class="pipe" aria-label="${STAGE_LABEL[stage(o)]}">${STAGES.map((_, k) => `<i class="${k <= i ? "on" : ""} ${k === i && i < 4 ? "now" : ""}"></i>`).join("")}</div>`; }
 
@@ -425,15 +425,91 @@ const Store = {
 };
 function log(type, text) { const S = Store.state; S.log.unshift({ ts: iso(Date.now()), actor: me() ? me().name : "System", type, text }); S.log = S.log.slice(0, 200); }
 
+
+/* ============ LIVE MODE: Business Central sandbox through /api ============ */
+// When the portal is hosted with its back end (Azure), it reads real BC data. Otherwise it runs on demo data.
+const Live = {
+  on: false, token: "", user: null, err: "",
+  async detect() {
+    try { const r = await Promise.race([fetch("/api/health", { cache: "no-store" }), new Promise((_, j) => setTimeout(() => j(new Error("t")), 8000))]); if (!r.ok) return false; const h = await r.json(); this.on = !!(h && h.checks && h.checks.token === "ok"); } catch (e) { this.on = false; }
+    return this.on;
+  },
+  async api(method, path, body) {
+    const r = await fetch("/api" + path, { method, headers: { "Content-Type": "application/json", "x-portal-token": this.token }, body: body ? JSON.stringify(body) : undefined, cache: "no-store" });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 401 && path !== "/auth/login") { session = null; saveSession(); this.token = ""; render(); throw new Error("Your session has ended. Please sign in again."); }
+    if (!r.ok) throw new Error(j.error || `Request failed (${r.status})`);
+    return j;
+  },
+  async login(username, password) {
+    const j = await this.api("POST", "/auth/login", { username, password });
+    this.token = j.token; this.user = j.user; return j.user;
+  },
+  async resume() {
+    if (!session || !session.token) return false;
+    this.token = session.token;
+    try { const j = await this.api("GET", "/auth/me"); this.user = j.user; return true; } catch (e) { return false; }
+  },
+  async load() {
+    const u = this.user; const S = Store.state;
+    const [cs, its, os, inv] = await Promise.all([this.api("GET", "/customers"), this.api("GET", "/items"), this.api("GET", "/orders"), this.api("GET", "/invoices")]);
+    const addr = c => [c.addressLine1, c.addressLine2, c.city, c.state, c.postalCode].filter(Boolean).join(", ");
+    S.customers = cs.value.map(c => ({ no: c.number, name: c.displayName, priceGroup: "LIST", contact: c.displayName, email: c.email || "", phone: c.phoneNumber || "", billTo: addr(c), shipTo: addr(c), terms: "Per BC", location: "", active: !c.blocked || !String(c.blocked).trim() }));
+    S.items = its.value.map(i => ({ no: i.number, desc: i.displayName, cat: i.itemCategoryCode || "Other", pack: i.baseUnitOfMeasureCode || "", uom: i.baseUnitOfMeasureCode || "", caseQty: 1, blocked: false, inventory: i.inventory }));
+    S.priceLists = S.items.map(i => ({ group: "LIST", itemNo: i.no, unitPrice: (its.value.find(x => x.number === i.no) || {}).unitPrice || 0, minQty: 1, startDate: "" }));
+    const split = ext => { const m = /^(WEB-[0-9A-Za-z-]+)(?:\/(.*))?$/.exec(ext || ""); return m ? { portalNo: m[1], po: m[2] || "" } : { portalNo: "", po: ext || "" }; };
+    const orders = os.value.map(o => {
+      const x = split(o.externalDocumentNumber);
+      const lines = (o.lines || []).filter(l => l.lineType === "Item").map(l => ({ lineNo: l.sequence, itemNo: l.lineObjectNumber, desc: l.description, uom: l.unitOfMeasureCode, qty: l.quantity, unitPrice: l.unitPrice }));
+      const shipped = (o.lines || []).filter(l => l.lineType === "Item" && l.shippedQuantity > 0);
+      return {
+        portalNo: x.portalNo || o.number, notPortal: !x.portalNo, customerNo: o.customerNumber, createdBy: "", createdAt: (o.orderDate || "") + "T00:00:00Z",
+        header: { orderDate: o.orderDate, requestedDeliveryDate: o.requestedDeliveryDate, customerPO: x.po, contact: "", email: "", phone: "", shipTo: o.customerName || "", billTo: "", terms: "", location: "", priceGroup: "LIST", notes: "" },
+        lines, bc: { soNo: o.number, status: o.bcStatus, reviewed: "", submittedAt: (o.orderDate || "") + "T00:00:00Z", releasedAt: "", reviewedAt: "" },
+        shipments: shipped.length ? [{ qbtNo: "—", soNo: o.number, date: "", lines: shipped.map(l => ({ itemNo: l.lineObjectNumber, lotNo: "lot via QBT API", qty: l.shippedQuantity })) }] : [],
+        invoice: null, bcTotal: o.totalAmountIncludingTax
+      };
+    });
+    inv.value.forEach(v => {
+      const invObj = { no: v.number, soNo: v.orderNumber, portalNo: "", date: v.invoiceDate, dueDate: v.dueDate, amount: v.totalAmountIncludingTax, remaining: v.remainingAmount, paidAt: "" };
+      const ord = v.orderNumber && orders.find(o => o.bc.soNo === v.orderNumber && !o.invoice);
+      if (ord) { ord.invoice = invObj; return; }
+      // Fully invoiced orders no longer exist in BC, so the invoice stands in for the order.
+      const x = split(v.externalDocumentNumber);
+      const lines = (v.lines || []).filter(l => l.lineType === "Item").map(l => ({ lineNo: l.sequence, itemNo: l.lineObjectNumber, desc: l.description, uom: l.unitOfMeasureCode, qty: l.quantity, unitPrice: l.unitPrice }));
+      orders.push({ portalNo: x.portalNo || v.number, notPortal: !x.portalNo, customerNo: v.customerNumber, createdBy: "", createdAt: (v.invoiceDate || "") + "T00:00:00Z", header: { orderDate: v.invoiceDate, requestedDeliveryDate: "", customerPO: x.po, contact: "", email: "", phone: "", shipTo: v.customerName || "", billTo: "", terms: "", location: "", priceGroup: "LIST", notes: "" }, lines, bc: { soNo: v.orderNumber || "—", status: "Released", reviewed: "", submittedAt: "", releasedAt: "", reviewedAt: "" }, shipments: [{ qbtNo: "—", soNo: v.orderNumber, date: v.invoiceDate, lines: lines.map(l => ({ itemNo: l.itemNo, lotNo: "lot via QBT API", qty: l.qty })) }], invoice: { ...invObj, portalNo: x.portalNo }, bcTotal: v.totalAmountIncludingTax });
+    });
+    S.orders = orders;
+    S.users = [{ id: "live", username: u.username, password: "", name: u.name, role: u.role, customerNo: u.customerNo, active: true }];
+    S.settings.env = "BC Sandbox"; S.settings.lastSync = iso(Date.now());
+    if (u.role === "customer" && !S.customers.find(c => c.no === u.customerNo)) throw new Error(`Customer ${u.customerNo} wasn't found in Business Central. Check the customer number on this sign-in.`);
+  }
+};
+const pno = o => o.notPortal ? "—" : o.portalNo;
+function newPortalNo() { const d = new Date().toISOString().slice(2, 10).replace(/-/g, ""); const b = new Uint8Array(3); crypto.getRandomValues(b); return `WEB-${d}-${[...b].map(x => x.toString(16).padStart(2, "0")).join("").toUpperCase().slice(0, 5)}`; }
+async function liveSignedIn() {
+  $("#app").innerHTML = `<div style="display:grid;place-items:center;min-height:100vh;text-align:center"><div><div class="logo" style="width:64px;height:64px;font-size:18px;margin:0 auto 14px"><span>JSH</span></div><div class="muted" style="font-weight:700">Loading from Business Central…</div></div></div>`;
+  try { await Live.load(); }
+  catch (e) { $("#app").innerHTML = `<div style="display:grid;place-items:center;min-height:100vh;padding:20px"><div class="card" style="max-width:460px"><h2 style="font-size:20px">Couldn't load your data</h2><p class="muted">${esc(e.message)}</p><button class="btn primary" data-act="logout">Back to sign-in</button></div></div>`; return; }
+  session = { userId: "live", token: Live.token, viewAs: session && session.viewAs || "" }; saveSession();
+  ui.itemGroup = "LIST"; render();
+}
+
 /* ============ BC adapter (demo mock — same call shapes as the real API) ============ */
 // Each method maps to the API call the live connector will make. In Demo it runs against the portal store.
 const BC = {
   getPriceList(priceGroup) { // CUSTOM API GET .../customerPriceLists?$filter=customerPriceGroup eq '{group}'
+    if (Live.on) { const S = Store.state; return S.priceLists.filter(p => p.group === priceGroup).map(p => ({ ...p, item: S.items.find(i => i.no === p.itemNo) })).filter(p => p.item); }
     log("get", `GET customerPriceLists?$filter=customerPriceGroup eq '${priceGroup}'`);
     const S = Store.state;
     return S.priceLists.filter(p => p.group === priceGroup).map(p => ({ ...p, item: S.items.find(i => i.no === p.itemNo) })).filter(p => p.item && !p.item.blocked);
   },
   async postSalesOrder(order) { // CUSTOM API POST .../portalSalesOrders (header + lines deep insert) → returns BC "No."
+    if (Live.on) {
+      const r = await Live.api("POST", "/orders", { portalOrderNo: order.portalNo, header: { customerPO: order.header.customerPO, requestedDeliveryDate: order.header.requestedDeliveryDate }, lines: order.lines.map(l => ({ itemNo: l.itemNo, quantity: l.qty })) });
+      log("post", `POST salesOrders ${order.portalNo} → ${r.number}${r.duplicate ? " (already existed)" : ""}`);
+      return { number: r.number, status: r.status || "Open", orderReviewed: "" };
+    }
     await wait(450);
     const S = Store.state; const soNo = "SO-" + S.settings.next.so++;
     log("post", `POST portalSalesOrders {portalOrderNo:'${order.portalNo}', lines:${order.lines.length}} → ${soNo}`);
@@ -441,6 +517,7 @@ const BC = {
   },
   async patchSalesOrder(order) { await wait(350); log("patch", `PATCH portalSalesOrders('${order.bc.soNo}') lines:${order.lines.length} (status Open)`); return true; },
   refresh(customerNo) { // read-only status sync
+    if (Live.on) { log("get", "Refresh from BC"); return Live.load().catch(e => toast(e.message)); }
     log("get", `GET portalSalesOrders?$filter=customerNo eq '${customerNo}' (status, orderReviewed)`);
     log("get", `GET qbtShipments?$filter=salesOrderNo in (…) (lot no., qty)`);
     log("get", `GET salesInvoices?$filter=customerNumber eq '${customerNo}' (remainingAmount)`);
@@ -508,7 +585,8 @@ function loginView() {
         <div class="err" id="lerr" role="alert"></div>
         <button class="btn primary" type="submit" style="justify-content:center;padding:13px">Sign in</button>
       </form>
-      <details style="margin-top:18px;font-size:13px"><summary class="muted" style="cursor:pointer;font-weight:700">Prototype sign-ins</summary>
+      ${Live.on ? `<p class="faint" style="font-size:13px;margin:16px 0 0">Connected to Business Central (sandbox).</p>` : ""}
+      <details style="margin-top:18px;font-size:13px;${Live.on ? "display:none" : ""}"><summary class="muted" style="cursor:pointer;font-weight:700">Prototype sign-ins</summary>
         <div class="chips" style="margin-top:10px">
           <button class="chip" data-fill="admin|Portal@Admin1" type="button">Admin · admin</button>
           <button class="chip" data-fill="wpg.buyer|Portal@Trial1" type="button">Customer · wpg.buyer</button>
@@ -519,9 +597,15 @@ function loginView() {
   </div>`;
 }
 function bindLogin() {
-  $("#loginForm").addEventListener("submit", e => {
+  $("#loginForm").addEventListener("submit", async e => {
     e.preventDefault();
     const u = $("#lu").value.trim().toLowerCase(), p = $("#lp").value;
+    if (Live.on) {
+      const btn = $("#loginForm button[type=submit]"); btn.disabled = true;
+      try { const lu = await Live.login(u, p); session = { userId: "live", token: Live.token, viewAs: "" }; route = { page: lu.role === "admin" ? "admin-overview" : "home", sub: "" }; await liveSignedIn(); toast(`Welcome, ${lu.name.split(" ")[0]}`); }
+      catch (err) { btn.disabled = false; $("#lerr").textContent = err.message; }
+      return;
+    }
     const user = Store.state.users.find(x => x.username.toLowerCase() === u && x.password === p);
     if (!user) { $("#lerr").textContent = "That username and password don't match. Check them and try again."; $(".login-card").animate([{ transform: "translateX(0)" }, { transform: "translateX(-8px)" }, { transform: "translateX(8px)" }, { transform: "translateX(0)" }], { duration: 300 }); return; }
     if (!user.active || (user.role === "customer" && !(customer(user.customerNo) || {}).active)) { $("#lerr").textContent = "This account is disabled. Ask your JSH contact to re-enable it."; return; }
@@ -602,7 +686,7 @@ function tile(goTo, cls, icon, title, count, sub) {
 function ordersTable(list, withPipe, admin) {
   if (!list.length) return `<div class="empty"><div class="big">🌿</div>Nothing here yet.</div>`;
   return `<div class="tbl-wrap"><table><thead><tr><th>Portal order</th><th>BC order</th>${admin ? "<th>Customer</th>" : ""}<th>Date</th><th>Your PO</th><th class="r">Units</th><th class="r">Total inc GST</th><th>Status</th>${withPipe ? "<th>Progress</th>" : ""}</tr></thead><tbody>
-  ${list.map((o, i) => { const t = totals(o.lines); return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * 0.03}s"><td class="mono"><b>${esc(o.portalNo)}</b></td><td class="mono">${esc(o.bc.soNo || "—")}</td>${admin ? `<td>${esc(customer(o.customerNo)?.name || o.customerNo)}</td>` : ""}<td>${dt(o.createdAt)}</td><td>${esc(o.header.customerPO || "—")}</td><td class="r num">${t.units}</td><td class="r num">${money(t.total)}</td><td>${pill(o)}</td>${withPipe ? `<td>${pipe(o)}</td>` : ""}</tr>`; }).join("")}
+  ${list.map((o, i) => { const t = totals(o.lines); return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * 0.03}s"><td class="mono"><b>${esc(pno(o))}</b></td><td class="mono">${esc(o.bc.soNo || "—")}</td>${admin ? `<td>${esc(customer(o.customerNo)?.name || o.customerNo)}</td>` : ""}<td>${dt(o.createdAt)}</td><td>${esc(o.header.customerPO || "—")}</td><td class="r num">${t.units}</td><td class="r num">${money(t.total)}</td><td>${pill(o)}</td>${withPipe ? `<td>${pipe(o)}</td>` : ""}</tr>`; }).join("")}
   </tbody></table></div>`;
 }
 function confirmedView() {
@@ -614,14 +698,14 @@ function confirmedView() {
 }
 function listView(st) {
   const list = myOrders().filter(o => stage(o) === st).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const rows = list.map((o, i) => { const sh = o.shipments[o.shipments.length - 1]; const t = totals(o.lines); return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * .03}s"><td class="mono"><b>${esc(o.portalNo)}</b></td><td class="mono">${esc(o.bc.soNo)}</td><td class="mono">${esc(sh.qbtNo)}</td><td>${dt(sh.date)}</td><td>${esc(o.header.customerPO || "—")}</td><td>${[...new Set(sh.lines.map(l => l.lotNo))].slice(0, 3).map(l => `<span class="lot">${esc(l)}</span>`).join("")}${sh.lines.length > 3 ? `<span class="faint">+${sh.lines.length - 3}</span>` : ""}</td><td class="r num">${money(t.total)}</td></tr>`; }).join("");
+  const rows = list.map((o, i) => { const sh = o.shipments[o.shipments.length - 1]; const t = totals(o.lines); return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * .03}s"><td class="mono"><b>${esc(pno(o))}</b></td><td class="mono">${esc(o.bc.soNo)}</td><td class="mono">${esc(sh.qbtNo)}</td><td>${dt(sh.date)}</td><td>${esc(o.header.customerPO || "—")}</td><td>${[...new Set(sh.lines.map(l => l.lotNo))].slice(0, 3).map(l => `<span class="lot">${esc(l)}</span>`).join("")}${sh.lines.length > 3 ? `<span class="faint">+${sh.lines.length - 3}</span>` : ""}</td><td class="r num">${money(t.total)}</td></tr>`; }).join("");
   return `<div class="page-head"><div><button class="crumb" data-go="home">← Home</button><h1>Orders Shipped</h1><p class="muted" style="margin:4px 0 0">Shipped orders with the lot numbers and quantities that left the warehouse. Open an order to see lots line by line.</p></div></div>
   <section class="card">${list.length ? `<div class="tbl-wrap"><table><thead><tr><th>Portal order</th><th>BC order</th><th>Shipment</th><th>Shipped</th><th>Your PO</th><th>Lots</th><th class="r">Total inc GST</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty"><div class="big">🚚</div>No orders are in transit right now.</div>`}</section>`;
 }
 function invoiceView(st) {
   const list = myOrders().filter(o => stage(o) === st).sort((a, b) => b.invoice.date.localeCompare(a.invoice.date));
   const sum = list.reduce((a, o) => a + (st === "paid" ? o.invoice.amount : o.invoice.remaining), 0);
-  const rows = list.map((o, i) => { const v = o.invoice; return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * .03}s"><td class="mono"><b>${esc(v.no)}</b></td><td class="mono">${esc(o.bc.soNo)}</td><td class="mono">${esc(o.portalNo)}</td><td>${dt(v.date)}</td><td>${st === "paid" ? dt(v.paidAt) : `${dt(v.dueDate)} ${isOverdue(o) ? '<span class="pill st-overdue" style="margin-left:4px">Overdue</span>' : ""}`}</td><td class="r num">${money(v.amount)}</td>${st === "paid" ? "" : `<td class="r num"><b>${money(v.remaining)}</b></td><td class="r"><button class="btn sm primary" data-pay="${esc(o.portalNo)}">Pay now</button></td>`}</tr>`; }).join("");
+  const rows = list.map((o, i) => { const v = o.invoice; return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * .03}s"><td class="mono"><b>${esc(v.no)}</b></td><td class="mono">${esc(o.bc.soNo)}</td><td class="mono">${esc(pno(o))}</td><td>${dt(v.date)}</td><td>${st === "paid" ? dt(v.paidAt) : `${dt(v.dueDate)} ${isOverdue(o) ? '<span class="pill st-overdue" style="margin-left:4px">Overdue</span>' : ""}`}</td><td class="r num">${money(v.amount)}</td>${st === "paid" ? "" : `<td class="r num"><b>${money(v.remaining)}</b></td><td class="r"><button class="btn sm primary" data-pay="${esc(o.portalNo)}">Pay now</button></td>`}</tr>`; }).join("");
   return `<div class="page-head"><div><button class="crumb" data-go="home">← Home</button><h1>${st === "paid" ? "Invoices Paid" : "Invoices To Be Paid"}</h1><p class="muted" style="margin:4px 0 0">${st === "paid" ? "Invoices that have been settled in full." : "Posted invoices with an outstanding balance. Each one shows its BC sales order and portal order number."}</p></div>
   <div class="card" style="padding:12px 18px"><div class="faint" style="font-size:12px;font-weight:700;text-transform:uppercase">${st === "paid" ? "Total paid" : "Total outstanding"}</div><div class="num" style="font-family:var(--display);font-size:24px;font-weight:800" data-count="${sum}" data-fmt="money">${money(sum)}</div></div></div>
   <section class="card">${list.length ? `<div class="tbl-wrap"><table><thead><tr><th>Invoice</th><th>BC order</th><th>Portal order</th><th>Invoice date</th><th>${st === "paid" ? "Paid on" : "Due"}</th><th class="r">Amount</th>${st === "paid" ? "" : '<th class="r">Balance</th><th></th>'}</tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty"><div class="big">${st === "paid" ? "💸" : "🎉"}</div>${st === "paid" ? "No paid invoices yet." : "You're all paid up."}</div>`}</section>`;
@@ -682,14 +766,14 @@ function linesTable() {
   </tbody></table></div>
   <div class="totals num"><div><span class="muted">Subtotal (${t.units} units)</span><span>${money(t.sub)}</span></div><div><span class="muted">GST 10%</span><span>${money(t.gst)}</span></div><div class="grand"><span>Total</span><span>${money(t.total)}</span></div></div>`;
 }
-function refreshLines() { $("#lines").innerHTML = linesTable(); const c = customer(draft.customerNo); $("#catList").innerHTML = catList(BC.getPriceList(c.priceGroup)); $("#submitBtn").disabled = !draft.lines.length; Store.state.log.shift(); }
+function refreshLines() { $("#lines").innerHTML = linesTable(); const c = customer(draft.customerNo); $("#catList").innerHTML = catList(BC.getPriceList(c.priceGroup)); $("#submitBtn").disabled = !draft.lines.length; (Live.on || Store.state.log.shift()); }
 function bindCreate() {
   document.querySelectorAll("[data-h]").forEach(el => el.addEventListener("input", () => { draft.header[el.dataset.h] = el.value; }));
-  const cs = $("#catSearch"); cs && cs.addEventListener("input", () => { ui.catSearch = cs.value; const c = customer(draft.customerNo); $("#catList").innerHTML = catList(BC.getPriceList(c.priceGroup)); Store.state.log.shift(); });
+  const cs = $("#catSearch"); cs && cs.addEventListener("input", () => { ui.catSearch = cs.value; const c = customer(draft.customerNo); $("#catList").innerHTML = catList(BC.getPriceList(c.priceGroup)); (Live.on || Store.state.log.shift()); });
   $("#lines").addEventListener("change", e => { const it = e.target.dataset.qi; if (!it) return; const l = draft.lines.find(x => x.itemNo === it); let v = parseInt(e.target.value, 10); if (!(v > 0)) v = 1; l.qty = Math.min(v, 9999); refreshLines(); });
 }
 function addLine(itemNo) {
-  const c = customer(draft.customerNo); const p = BC.getPriceList(c.priceGroup).find(x => x.itemNo === itemNo); Store.state.log.shift();
+  const c = customer(draft.customerNo); const p = BC.getPriceList(c.priceGroup).find(x => x.itemNo === itemNo); (Live.on || Store.state.log.shift());
   if (!p) { toast("That item isn't on your price list."); return; }
   const ex = draft.lines.find(l => l.itemNo === itemNo);
   if (ex) ex.qty += p.minQty; else draft.lines.push({ lineNo: (draft.lines.length + 1) * 10000, itemNo, desc: p.item.desc, uom: p.item.uom, qty: p.minQty, unitPrice: p.unitPrice });
@@ -716,7 +800,9 @@ async function submitOrder() {
     log("admin", `${me().name} edited ${live.portalNo} / ${live.bc.soNo}`);
   } else {
     await run("s2", 300);
-    const res = await BC.postSalesOrder(draft);
+    let res;
+    try { res = await BC.postSalesOrder(draft); }
+    catch (e) { openModal(`<h2 style="font-size:22px">Order not created</h2><p class="muted" style="margin:8px 0 0">${esc(e.message)}</p><p class="faint" style="font-size:13px">Nothing was created in Business Central. Your order is still here: fix the issue and submit again.</p><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-act="close-layer">Back to my order</button></div>`); return; }
     await run("s3", 300);
     const o = clone(draft); delete o._editing; o.createdAt = iso(Date.now()); o.createdBy = me().name;
     o.bc = { soNo: res.number, status: res.status, reviewed: res.orderReviewed, submittedAt: iso(Date.now()), releasedAt: "", reviewedAt: "" };
@@ -732,6 +818,7 @@ async function submitOrder() {
     <div class="faint" style="font-size:13px">Portal order no. ⇄ BC sales order no.</div>
     <div style="display:flex;gap:10px;justify-content:center;margin-top:20px;flex-wrap:wrap"><button class="btn ghost" data-act="close-go" data-to="confirmed">View my orders</button><button class="btn primary" data-act="close-new">Create another</button></div></div>`);
   if (!editing) confetti();
+  if (Live.on) BC.refresh();
 }
 
 /* ============ order drawer ============ */
@@ -744,8 +831,8 @@ function openOrder(portalNo) {
   $("#layer").innerHTML = `<div class="scrim" data-act="close-layer"></div><aside class="drawer" role="dialog" aria-label="Order ${esc(o.portalNo)}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px"><div><div class="faint" style="font-weight:700;font-size:13px">${esc(c?.name || o.customerNo)}</div><h2 style="font-size:24px">Order ${esc(o.portalNo)}</h2><div style="margin-top:6px">${pill(o)}</div></div><button class="x" data-act="close-layer" aria-label="Close">✕</button></div>
     <div class="timeline">${["Submitted", "Confirmed", "Shipped", "Invoiced", "Paid"].map((l, k) => `<div class="tl ${k <= idx ? "done" : ""} ${k === idx && k < 4 ? "cur" : ""}"><div class="c">${k <= idx ? "✓" : k + 1}</div>${l}<small>${k <= idx && dates[k] ? dt(dates[k]) : ""}</small></div>`).join("")}</div>
-    <div class="kv"><div><span>Portal order no.</span><b class="mono">${esc(o.portalNo)}</b></div><div><span>BC sales order no.</span><b class="mono">${esc(o.bc.soNo)}</b></div><div><span>Your PO</span><b>${esc(o.header.customerPO || "—")}</b></div>
-      <div><span>BC status</span><b>${esc(o.bc.status || "—")}</b></div><div><span>Order reviewed</span><b>${esc(o.bc.reviewed || "Not yet")}</b></div><div><span>Requested delivery</span><b>${dt(o.header.requestedDeliveryDate)}</b></div>
+    <div class="kv"><div><span>Portal order no.</span><b class="mono">${o.notPortal ? "Not placed in portal" : esc(o.portalNo)}</b></div><div><span>BC sales order no.</span><b class="mono">${esc(o.bc.soNo)}</b></div><div><span>Your PO</span><b>${esc(o.header.customerPO || "—")}</b></div>
+      <div><span>BC status</span><b>${esc(o.bc.status || "—")}</b></div><div><span>Order reviewed</span><b>${Live.on ? "Custom API pending" : esc(o.bc.reviewed || "Not yet")}</b></div><div><span>Requested delivery</span><b>${dt(o.header.requestedDeliveryDate)}</b></div>
       <div style="grid-column:span 2"><span>Ship to</span><b>${esc(o.header.shipTo)}</b></div><div><span>Placed by</span><b>${esc(o.createdBy)}</b></div>
       ${o.invoice ? `<div><span>Invoice</span><b class="mono">${esc(o.invoice.no)}</b></div><div><span>Due</span><b>${dt(o.invoice.dueDate)}</b></div><div><span>Balance</span><b class="num">${money(o.invoice.remaining)}</b></div>` : ""}</div>
     ${o.header.notes ? `<p class="muted" style="margin:12px 0 0"><b>Notes:</b> ${esc(o.header.notes)}</p>` : ""}
@@ -806,7 +893,7 @@ function adminOverview() {
   const ar = os.filter(o => stage(o) === "invoiced").reduce((a, o) => a + o.invoice.remaining, 0);
   const month = os.filter(o => new Date(o.createdAt).getMonth() === new Date().getMonth() && new Date(o.createdAt).getFullYear() === new Date().getFullYear());
   const recent = [...os].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8);
-  return `<div class="page-head"><div><h1>Portal overview</h1><p class="muted" style="margin:4px 0 0">${S.customers.filter(c => c.active).length} active customers · ${S.users.filter(u => u.role === "customer" && u.active).length} customer users · data: ${S.settings.env === "demo" ? "demo" : esc(S.settings.env)} (${Store.mode === "cloud" ? "saved to the artifact" : Store.mode === "local" ? "saved in this browser" : "this session only"})</p></div>
+  return `<div class="page-head"><div><h1>Portal overview</h1><p class="muted" style="margin:4px 0 0">${S.customers.filter(c => c.active).length} active customers · ${S.users.filter(u => u.role === "customer" && u.active).length} customer users · data: ${S.settings.env === "demo" ? "demo" : esc(S.settings.env)} (${Store.mode === "live" ? "read live from BC" : Store.mode === "cloud" ? "saved to the artifact" : Store.mode === "local" ? "saved in this browser" : "this session only"})</p></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap"><select class="input" id="viewAsSel" style="width:auto" aria-label="Preview as customer"><option value="">Preview as customer…</option>${S.customers.map(c => `<option value="${esc(c.no)}">${esc(c.name)}</option>`).join("")}</select></div></div>
   <div class="grid anim">
     <section class="kpis">
@@ -852,6 +939,7 @@ function adminItems() {
 }
 function adminUsers() {
   const S = Store.state;
+  if (Live.on) return `<div class="page-head"><div><h1>Portal users</h1><p class="muted" style="margin:4px 0 0">In the sandbox trial, sign-ins are kept in the PORTAL_USERS setting in Azure. Ask your consultant to add or disable a user.</p></div></div><section class="card"><div class="rule">${ICON.shield}<span>Signed in as ${esc(me().name)} (${esc(me().role)}). Customer sign-in on Microsoft Entra External ID comes next.</span></div></section>`;
   return `<div class="page-head"><div><h1>Portal users</h1><p class="muted" style="margin:4px 0 0">For the trial, sign-ins are set up by hand. Customer self-invite comes later.</p></div><button class="btn primary" data-act="add-user">${ICON.plus.replace("<svg", '<svg width="16" height="16"')} Add user</button></div>
   <section class="card"><div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Customer</th><th>Status</th><th></th></tr></thead><tbody>
   ${S.users.map((u, i) => `<tr style="animation-delay:${i * .03}s"><td><b>${esc(u.name)}</b></td><td class="mono">${esc(u.username)}</td><td><span class="pill ${u.role === "admin" ? "st-confirmed" : "st-shipped"}">${esc(u.role)}</span></td><td>${esc(u.customerNo ? customer(u.customerNo)?.name || u.customerNo : "—")}</td><td>${u.active ? '<span class="pill st-paid">Active</span>' : '<span class="pill st-invoiced">Disabled</span>'}</td><td style="white-space:nowrap">${u.id === session.userId ? '<span class="faint">You</span>' : `<button class="btn sm ghost" data-ureset="${esc(u.id)}">Reset password</button> <button class="btn sm ${u.active ? "danger" : ""}" data-utog="${esc(u.id)}">${u.active ? "Disable" : "Enable"}</button>`}</td></tr>`).join("")}
@@ -872,8 +960,8 @@ function adminSettings() {
   ];
   return `<div class="page-head"><div><h1>Settings</h1><p class="muted" style="margin:4px 0 0">Data source, API mapping, data rules and reset.</p></div></div>
   <div class="grid anim">
-    <section class="card"><h2 style="font-size:18px">Data source</h2><p class="muted" style="margin:4px 0 12px">The portal is running on demo data. Sandbox and Production unlock once the BC connector (Entra app registration + APIs) is in place.</p>
-      <div class="switch"><button class="on">Demo</button><button disabled title="Connector pending">BC Sandbox</button><button disabled title="Connector pending">BC Production</button></div></section>
+    <section class="card"><h2 style="font-size:18px">Data source</h2><p class="muted" style="margin:4px 0 12px">${Live.on ? "Connected to the Business Central sandbox. Reads are live; order creation follows the ALLOW_ORDER_CREATE setting in Azure." : "The portal is running on demo data (no back end found)."}</p>
+      <div class="switch"><button class="${Live.on ? "" : "on"}" disabled>Demo</button><button class="${Live.on ? "on" : ""}" disabled>BC Sandbox</button><button disabled title="Not yet">BC Production</button></div></section>
     <section class="card"><h2 style="font-size:18px;margin-bottom:8px">API mapping</h2><div class="tbl-wrap"><table><thead><tr><th>Use</th><th>Type</th><th>Call</th><th>Gives the portal</th><th>Status</th></tr></thead><tbody>
       ${apis.map(a => `<tr style="animation:none"><td><b>${a[0]}</b></td><td><span class="pill ${a[1] === "Custom" ? "st-invoiced" : "st-shipped"}">${a[1]}</span></td><td class="mono" style="font-size:12px">${esc(a[2])}</td><td>${esc(a[3])}</td><td><span class="pill st-submitted">Awaiting API</span></td></tr>`).join("")}
     </tbody></table></div></section>
@@ -882,7 +970,7 @@ function adminSettings() {
       <div class="rule">${ICON.shield}<span>The portal never bulk-creates or overwrites BC data. Status sync is read-only (GET).</span></div>
       <div class="rule">${ICON.shield}<span>Edits are allowed only while BC Status = Open. Once released, the order is locked in the portal.</span></div>
       <div class="rule">${ICON.shield}<span>Customers only see and order items on their own price list (Customer Price Group). Every line is checked again on submit.</span></div></div></section>
-    <section class="card" style="border:1px solid #ffd0da"><h2 style="font-size:18px">Reset portal data</h2><p class="muted" style="margin:4px 0 12px">Affects portal data only. Nothing is deleted in Business Central.</p>
+    <section class="card" style="border:1px solid #ffd0da;${Live.on ? "display:none" : ""}"><h2 style="font-size:18px">Reset portal data</h2><p class="muted" style="margin:4px 0 12px">Affects portal data only. Nothing is deleted in Business Central.</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn danger" data-act="reset-orders">Clear all orders</button><button class="btn danger" data-act="reset-all">Reset everything to demo data</button></div></section>
   </div>`;
 }
@@ -948,7 +1036,7 @@ document.addEventListener("click", e => {
   if (d.add) { addLine(d.add); return; }
   if (d.rm) { draft.lines = draft.lines.filter(l => l.itemNo !== d.rm); refreshLines(); return; }
   if (d.q) { const [it, dlt] = d.q.split("|"); const l = draft.lines.find(x => x.itemNo === it); const step = Number(dlt); l.qty = Math.max(1, l.qty + step); refreshLines(); return; }
-  if (d.cat) { ui.catCat = d.cat; document.querySelectorAll("[data-cat]").forEach(b => b.classList.toggle("on", b.dataset.cat === d.cat)); $("#catList").innerHTML = catList(BC.getPriceList(customer(draft.customerNo).priceGroup)); S.log.shift(); return; }
+  if (d.cat) { ui.catCat = d.cat; document.querySelectorAll("[data-cat]").forEach(b => b.classList.toggle("on", b.dataset.cat === d.cat)); $("#catList").innerHTML = catList(BC.getPriceList(customer(draft.customerNo).priceGroup)); (Live.on || S.log.shift()); return; }
   if (d.conf) { ui.confFilter = d.conf; render(); return; }
   if (d.af) { ui.adminFilter = d.af; render(); return; }
   if (d.ig) { ui.itemGroup = d.ig; render(); return; }
@@ -961,14 +1049,14 @@ document.addEventListener("click", e => {
   if (d.utog) { const u = S.users.find(x => x.id === d.utog); u.active = !u.active; log("admin", `User ${u.username} ${u.active ? "enabled" : "disabled"}`); Store.save(); render(); return; }
   if (d.ureset) { const u = S.users.find(x => x.id === d.ureset); u.password = genPw(); log("admin", `Password reset for ${u.username}`); Store.save(); openModal(`<h2 style="font-size:22px">Password reset</h2><div class="kv" style="grid-template-columns:1fr 1fr;margin-top:12px"><div><span>Username</span><b class="mono">${esc(u.username)}</b></div><div><span>New password</span><b class="mono">${esc(u.password)}</b></div></div><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-act="close-layer">Done</button></div>`); return; }
   switch (d.act) {
-    case "logout": log("auth", `${me().name} signed out`); Store.save(); session = null; saveSession(); draft = null; closeModal(); render(); break;
+    case "logout": if (me()) log("auth", `${me().name} signed out`); Store.save(); Live.token = ""; session = null; saveSession(); draft = null; closeModal(); render(); break;
     case "exit-viewas": session.viewAs = ""; saveSession(); draft = null; go("admin-overview"); break;
     case "close-layer": closeModal(); break;
     case "close-go": closeModal(); go(d.to); break;
     case "close-new": closeModal(); startDraft(); break;
     case "cancel-draft": draft = null; go(route.sub || "home"); break;
     case "submit-order": submitOrder(); break;
-    case "sync": { const b = t; b.disabled = true; b.querySelector("svg").animate([{ transform: "rotate(0)" }, { transform: "rotate(360deg)" }], { duration: 700, iterations: 2 }); BC.refresh(activeCustomerNo()); Store.save(); setTimeout(() => { render(); toast("Status refreshed from Business Central"); }, reduced ? 0 : 900); break; }
+    case "sync": { const b = t; b.disabled = true; b.querySelector("svg").animate([{ transform: "rotate(0)" }, { transform: "rotate(360deg)" }], { duration: 700, iterations: 2 }); Promise.resolve(BC.refresh(activeCustomerNo())).then(() => { Store.save(); setTimeout(() => { render(); toast("Status refreshed from Business Central"); }, reduced ? 0 : 900); }); break; }
     case "add-user": userModal(); break;
     case "reset-orders": resetModal("orders"); break;
     case "reset-all": resetModal("all"); break;
@@ -980,7 +1068,14 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#layer"
 
 
 /* ============ boot ============ */
-(async () => { await Store.init(); const h = location.hash.slice(1); if (h && me()) route.page = h === "create" ? "home" : h; render(); })();
+(async () => {
+  if (await Live.detect()) {
+    Store.state = demoState(); Store.state.orders = []; Store.state.log = []; Store.mode = "live"; Store.save = async () => {};
+    if (await Live.resume()) { const h = location.hash.slice(1); route.page = h && h !== "create" ? h : (Live.user.role === "admin" ? "admin-overview" : "home"); await liveSignedIn(); return; }
+    session = null; saveSession(); render(); return;
+  }
+  await Store.init(); const h = location.hash.slice(1); if (h && me()) route.page = h === "create" ? "home" : h; render();
+})();
 })();
 </script>
 </body>

@@ -150,8 +150,8 @@ app.http("invoices", {
   handler: handler(async (request, ctx, user) => {
     const cust = scopeCustomer(request, user);
     const filter = cust ? `&$filter=customerNumber eq ${lit(cust)}` : "";
-    const r = await bc("GET", `/salesInvoices?$select=id,number,invoiceDate,dueDate,orderNumber,externalDocumentNumber,customerNumber,customerName,totalAmountIncludingTax,remainingAmount,status&$orderby=invoiceDate desc&$top=100${filter}`);
-    return json(200, { value: r.value });
+    const r = await bc("GET", `/salesInvoices?$select=id,number,invoiceDate,dueDate,orderNumber,externalDocumentNumber,customerNumber,customerName,totalAmountIncludingTax,remainingAmount,status&$expand=salesInvoiceLines($select=sequence,lineType,lineObjectNumber,description,unitOfMeasureCode,quantity,unitPrice)&$orderby=invoiceDate desc&$top=100${filter}`);
+    return json(200, { value: r.value.map(({ salesInvoiceLines, ...v }) => ({ ...v, lines: salesInvoiceLines || [] })) });
   })
 });
 
