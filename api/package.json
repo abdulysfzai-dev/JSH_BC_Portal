@@ -1,0 +1,15 @@
+{
+  "name": "jsh-portal-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "JSH Trade Portal back end: talks to Business Central for the portal",
+  "main": "src/functions/*.js",
+  "scripts": {
+    "start": "func start",
+    "hash": "node tools/hash-password.js"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.0"
+  },
+  "engines": { "node": ">=20" }
+}

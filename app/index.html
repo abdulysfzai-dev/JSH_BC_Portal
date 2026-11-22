@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JSH Trade Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Layout idea: soft pastel "wellness" canvas, glass cards, one raspberry→peach accent gradient, pastel stage colours */
+  --ink:#1d1a2b; --ink-2:#5b5670; --ink-3:#8f8aa3;
+  --bg:#fbf9ff; --card:rgba(255,255,255,.78); --line:#ece7f5;
+  --accent:#e6407a; --accent-2:#ff9f6e; --violet:#7a5cff;
+  --blush:#ffd3df; --peach:#ffe0c7; --lilac:#e3dbff; --mint:#c9f0de; --sky:#d3e8ff; --butter:#fff1b8;
+  --s-sub:#f4a72b; --s-conf:#7a5cff; --s-ship:#2d9cdb; --s-inv:#e6407a; --s-paid:#1fae74;
+  --display:"Sora", system-ui, sans-serif; --body:"Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --r:18px; --shadow:0 10px 30px -12px rgba(73,40,120,.18), 0 2px 6px rgba(73,40,120,.06);
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:var(--body);color:var(--ink);background:var(--bg);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.02em}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid color-mix(in srgb,var(--violet) 55%,transparent);outline-offset:2px;border-radius:10px}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-2)} .faint{color:var(--ink-3)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* Backdrop blobs */
+.blobs{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.blob{position:absolute;border-radius:50%;filter:blur(60px);opacity:.75;animation:float 18s ease-in-out infinite}
+.b1{width:520px;height:520px;background:var(--blush);top:-160px;left:-120px}
+.b2{width:460px;height:460px;background:var(--lilac);top:20%;right:-140px;animation-delay:-6s}
+.b3{width:420px;height:420px;background:var(--peach);bottom:-160px;left:25%;animation-delay:-11s}
+.b4{width:300px;height:300px;background:var(--mint);bottom:10%;right:20%;animation-delay:-3s;opacity:.55}
+@keyframes float{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,-30px) scale(1.06)}66%{transform:translate(-30px,25px) scale(.96)}}
+#app{position:relative;z-index:1;min-height:100%}
+
+/* Buttons & inputs */
+.btn{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:10px 18px;font-weight:700;background:#fff;box-shadow:var(--shadow);transition:transform .15s,box-shadow .15s,background .15s}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn.primary{background:linear-gradient(120deg,var(--accent),var(--accent-2));color:#fff}
+.btn.dark{background:var(--ink);color:#fff}
+.btn.ghost{background:transparent;box-shadow:none;border:1px solid var(--line)}
+.btn.sm{padding:6px 12px;font-size:13px}
+.btn.danger{background:#fff0f2;color:#c2264f;box-shadow:none;border:1px solid #ffd0da}
+.btn[disabled]{opacity:.45;cursor:not-allowed;transform:none}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:12px;font-weight:700;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em}
+.input{width:100%;border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 12px;transition:border .15s,box-shadow .15s}
+.input:focus{outline:none;border-color:var(--violet);box-shadow:0 0 0 4px color-mix(in srgb,var(--violet) 15%,transparent)}
+.input[readonly]{background:#f6f3fb;color:var(--ink-2)}
+.prefill{position:relative}
+.prefill .input{padding-right:74px;text-overflow:ellipsis}
+.prefill::after{content:"from BC";position:absolute;right:10px;top:31px;font-size:10px;font-weight:700;color:var(--violet);background:var(--lilac);padding:2px 6px;border-radius:6px}
+
+/* Login */
+.login{min-height:100vh;display:grid;grid-template-columns:1.1fr 1fr;align-items:center;gap:40px;padding:40px clamp(16px,5vw,80px)}
+.login-hero h1{font-size:clamp(34px,5vw,58px);line-height:1.04;font-weight:800}
+.grad-text{background:linear-gradient(110deg,var(--accent),var(--accent-2) 55%,var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent;background-size:200% auto;animation:sheen 6s linear infinite}
+@keyframes sheen{to{background-position:200% center}}
+.login-card{background:var(--card);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.9);border-radius:28px;padding:34px;box-shadow:var(--shadow);max-width:440px;width:100%;justify-self:center;animation:rise .6s cubic-bezier(.2,.8,.2,1)}
+.login-card form{display:grid;gap:16px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600}
+.chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.hero-pills{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+.hero-pill{display:flex;align-items:center;gap:8px;background:#fff;border-radius:999px;padding:8px 14px;box-shadow:var(--shadow);font-weight:600;font-size:14px;animation:rise .7s both}
+.dot{width:10px;height:10px;border-radius:50%}
+.err{color:#c2264f;font-weight:600;font-size:14px;min-height:20px}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+/* Shell */
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;padding:14px clamp(16px,3vw,36px);background:rgba(251,249,255,.72);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:800;font-size:18px;border:0;background:none;padding:0}
+.logo{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:#fff;font-size:13px;font-weight:800;background:conic-gradient(from 200deg,var(--accent),var(--accent-2),var(--violet),var(--accent));animation:spin 12s linear infinite}
+.logo span{animation:spin 12s linear infinite reverse;display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.badge{font-size:11px;font-weight:800;padding:3px 9px;border-radius:999px;background:var(--butter);color:#7a5a00;letter-spacing:.04em;text-transform:uppercase}
+.badge.env-demo{background:var(--butter);color:#7a5a00}
+.top .sp{flex:1}
+.who{display:flex;align-items:center;gap:10px}
+.avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--violet),var(--accent))}
+.nav{display:flex;gap:6px;flex-wrap:wrap;padding:12px clamp(16px,3vw,36px) 0}
+.nav button{border:0;background:transparent;padding:8px 14px;border-radius:999px;font-weight:700;color:var(--ink-2)}
+.nav button.on{background:#fff;color:var(--ink);box-shadow:var(--shadow)}
+.main{padding:22px clamp(16px,3vw,36px) 60px;max-width:1360px;margin:0 auto}
+.viewas{background:var(--ink);color:#fff;padding:8px 16px;display:flex;gap:12px;align-items:center;justify-content:center;font-weight:600;font-size:14px}
+.viewas button{background:#fff;color:var(--ink);border:0;border-radius:999px;padding:4px 12px;font-weight:700}
+
+.card{background:var(--card);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.9);border-radius:var(--r);box-shadow:var(--shadow);padding:20px}
+.grid{display:grid;gap:18px}
+.anim>*{animation:rise .5s both}
+.anim>*:nth-child(2){animation-delay:.05s}.anim>*:nth-child(3){animation-delay:.1s}.anim>*:nth-child(4){animation-delay:.15s}.anim>*:nth-child(5){animation-delay:.2s}.anim>*:nth-child(6){animation-delay:.25s}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+.page-head h1{font-size:clamp(24px,3vw,32px);font-weight:800}
+.crumb{border:0;background:none;color:var(--ink-2);font-weight:700;padding:0;margin-bottom:6px}
+
+/* Hero */
+.hero{position:relative;overflow:hidden;border-radius:26px;padding:28px;color:var(--ink);background:linear-gradient(120deg,#ffe1ea,#ffe9d8 45%,#ebe4ff);box-shadow:var(--shadow);display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:center}
+.hero h1{font-size:clamp(26px,3.4vw,40px);font-weight:800}
+.hero .ring{position:absolute;right:-60px;top:-60px;width:260px;height:260px;border-radius:50%;border:30px solid rgba(255,255,255,.45);animation:float 14s ease-in-out infinite}
+.hero-stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;position:relative}
+.hstat{background:rgba(255,255,255,.75);border-radius:16px;padding:14px}
+.hstat b{display:block;font-family:var(--display);font-size:24px}
+.hstat span{font-size:12px;font-weight:700;color:var(--ink-2);text-transform:uppercase;letter-spacing:.05em}
+
+/* Tiles */
+.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
+.tile{position:relative;overflow:hidden;text-align:left;border:0;border-radius:22px;padding:18px;min-height:150px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:var(--shadow);transition:transform .2s cubic-bezier(.2,.8,.2,1),box-shadow .2s}
+.tile:hover{transform:translateY(-4px) rotate(-.4deg);box-shadow:0 18px 40px -16px rgba(73,40,120,.35)}
+.tile .ico{width:42px;height:42px;border-radius:14px;background:rgba(255,255,255,.7);display:grid;place-items:center}
+.tile .ico svg{width:22px;height:22px}
+.tile h3{font-size:16px;font-weight:700;margin-top:12px}
+.tile .count{font-family:var(--display);font-size:34px;font-weight:800;line-height:1}
+.tile .sub{font-size:12px;font-weight:600;color:var(--ink-2)}
+.tile::after{content:"";position:absolute;width:120px;height:120px;border-radius:50%;right:-40px;bottom:-40px;background:rgba(255,255,255,.35);transition:transform .4s}
+.tile:hover::after{transform:scale(1.5)}
+.t-create{background:linear-gradient(140deg,var(--accent),var(--accent-2));color:#fff}
+.t-create .sub{color:rgba(255,255,255,.85)}
+.t-conf{background:var(--lilac)} .t-ship{background:var(--sky)} .t-inv{background:var(--blush)} .t-paid{background:var(--mint)}
+
+/* Pills & pipeline */
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;padding:4px 10px;border-radius:999px;white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.st-submitted{background:#fff3dc;color:#a96800}
+.st-confirmed{background:#ede8ff;color:#5638e0}
+.st-shipped{background:#e0f1ff;color:#1774b0}
+.st-invoiced{background:#ffe3ec;color:#c2264f}
+.st-paid{background:#dcf7ea;color:#127a50}
+.st-overdue{background:#c2264f;color:#fff}
+.pipe{display:flex;align-items:center;gap:0;min-width:160px}
+.pipe i{flex:1;height:6px;background:var(--line);border-radius:6px;margin-right:4px;position:relative;overflow:hidden}
+.pipe i.on{background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+.pipe i.now::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.8),transparent);animation:shimmer 1.6s infinite}
+@keyframes shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+
+/* Tables */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:separate;border-spacing:0}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:12px;border-bottom:1px solid var(--line);vertical-align:middle}
+tbody tr{transition:background .15s}
+tbody tr.click:hover{background:rgba(255,255,255,.9);cursor:pointer}
+tbody tr{animation:rise .4s both}
+td.r,th.r{text-align:right}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;white-space:nowrap}
+.link{border:0;background:none;padding:0;color:var(--violet);font-weight:700}
+.empty{padding:40px;text-align:center;color:var(--ink-2)}
+.empty .big{font-size:40px;margin-bottom:6px}
+
+/* Create order */
+.co{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(320px,1fr);gap:18px;align-items:start}
+.form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.form-grid .span2{grid-column:span 2}.form-grid .span3{grid-column:1/-1}
+.cat{position:sticky;top:84px;max-height:calc(100vh - 110px);display:flex;flex-direction:column}
+.cat-list{overflow:auto;display:grid;gap:10px;padding:4px 2px 4px 0;margin-top:12px}
+.prod{display:grid;grid-template-columns:48px 1fr auto;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:16px;padding:10px;transition:transform .15s,border .15s}
+.prod:hover{transform:translateX(3px);border-color:var(--blush)}
+.prod .sw{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:12px}
+.prod b{display:block;font-size:14px;line-height:1.25}
+.prod small{color:var(--ink-3);font-size:12px}
+.add{width:36px;height:36px;border-radius:50%;border:0;background:var(--ink);color:#fff;font-size:20px;line-height:1;display:grid;place-items:center;transition:transform .2s}
+.add:hover{transform:rotate(90deg) scale(1.08)}
+.add.in{background:var(--s-paid)}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;background:#fff}
+.qty button{width:30px;height:30px;border:0;background:none;font-weight:800;font-size:16px}
+.qty input{width:52px;border:0;text-align:center;background:none;font-weight:700}
+.qty input:focus{outline:none}
+.totals{display:grid;gap:6px;margin-top:14px;padding-top:14px;border-top:1px dashed var(--line)}
+.totals div{display:flex;justify-content:space-between}
+.totals .grand{font-family:var(--display);font-size:22px;font-weight:800}
+.order-no{font-family:var(--display);font-weight:800;font-size:15px;background:var(--ink);color:#fff;padding:6px 12px;border-radius:10px;letter-spacing:.03em}
+.rule{display:flex;gap:10px;align-items:flex-start;background:#f3efff;border-radius:14px;padding:12px 14px;font-size:13px;color:#4a3aa8}
+.rule svg{flex:none;width:18px;height:18px;margin-top:1px}
+
+/* Drawer & modal */
+.scrim{position:fixed;inset:0;background:rgba(29,26,43,.35);backdrop-filter:blur(3px);z-index:50;animation:fade .2s}
+@keyframes fade{from{opacity:0}}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(720px,100%);background:var(--bg);z-index:51;overflow:auto;box-shadow:-20px 0 60px rgba(29,26,43,.2);animation:slide .35s cubic-bezier(.2,.8,.2,1);padding:24px}
+@keyframes slide{from{transform:translateX(40px);opacity:0}}
+.modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(520px,calc(100% - 32px));max-height:calc(100% - 32px);overflow:auto;background:#fff;border-radius:24px;z-index:52;padding:26px;box-shadow:0 30px 80px rgba(29,26,43,.3);animation:pop .3s cubic-bezier(.2,.8,.2,1.2)}
+@keyframes pop{from{opacity:0;transform:translate(-50%,-46%) scale(.96)}}
+.x{border:0;background:#fff;width:36px;height:36px;border-radius:50%;box-shadow:var(--shadow);font-size:18px}
+.timeline{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:18px 0}
+.tl{text-align:center;font-size:12px;font-weight:700;color:var(--ink-3)}
+.tl .c{width:34px;height:34px;margin:0 auto 6px;border-radius:50%;display:grid;place-items:center;background:var(--line);color:#fff;transition:transform .3s}
+.tl.done .c{background:linear-gradient(135deg,var(--accent),var(--accent-2))}
+.tl.cur .c{animation:pulse 1.8s infinite}
+.tl.done{color:var(--ink)}
+.tl small{display:block;font-weight:600;color:var(--ink-3)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(230,64,122,.45)}70%{box-shadow:0 0 0 12px rgba(230,64,122,0)}100%{box-shadow:0 0 0 0 rgba(230,64,122,0)}}
+.kv{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.kv div{background:#fff;border-radius:14px;padding:10px 12px;border:1px solid var(--line)}
+.kv span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:700}
+.kv b{font-size:14px;word-break:break-word}
+.lot{display:inline-flex;gap:6px;align-items:center;background:var(--sky);color:#14598a;border-radius:8px;padding:2px 8px;font-size:12px;font-weight:700;margin:2px 4px 2px 0;white-space:nowrap}
+
+/* Posting animation */
+.steps{display:grid;gap:10px;margin:16px 0}
+.step{display:flex;align-items:center;gap:12px;font-weight:600;color:var(--ink-3);transition:color .3s}
+.step .b{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;flex:none}
+.step.run{color:var(--ink)} .step.run .b{border-color:var(--violet);border-top-color:transparent;animation:spin .8s linear infinite}
+.step.ok{color:var(--ink)} .step.ok .b{background:var(--s-paid);border-color:var(--s-paid);color:#fff}
+.success-check{width:84px;height:84px;margin:0 auto 10px;display:block}
+.success-check circle{stroke:var(--s-paid);stroke-width:4;fill:none;stroke-dasharray:240;stroke-dashoffset:240;animation:draw .7s forwards}
+.success-check path{stroke:var(--s-paid);stroke-width:5;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:60;stroke-dashoffset:60;animation:draw .4s .6s forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.link-pair{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin:14px 0}
+.link-pair .order-no:last-child{background:var(--violet)}
+
+/* Toast */
+#toasts{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:60;display:grid;gap:8px}
+.toast{background:var(--ink);color:#fff;padding:10px 18px;border-radius:999px;font-weight:600;box-shadow:var(--shadow);animation:rise .3s}
+#confetti{position:fixed;inset:0;pointer-events:none;z-index:70}
+
+/* Admin */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.kpi{border-radius:20px;padding:18px;box-shadow:var(--shadow)}
+.kpi b{display:block;font-family:var(--display);font-size:30px;font-weight:800}
+.kpi span{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-2)}
+.sim{display:flex;gap:6px;flex-wrap:wrap}
+.log{display:grid;gap:8px;max-height:420px;overflow:auto}
+.log div{display:grid;grid-template-columns:auto 1fr;gap:10px;font-size:13px;padding:8px 10px;background:#fff;border-radius:12px;border:1px solid var(--line)}
+.tag{font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;text-transform:uppercase;letter-spacing:.05em;align-self:start}
+.tag.get{background:var(--sky);color:#14598a}.tag.post{background:var(--blush);color:#a8204b}.tag.patch{background:var(--peach);color:#9a4a10}.tag.sim{background:var(--butter);color:#7a5a00}.tag.auth{background:var(--mint);color:#127a50}.tag.admin{background:var(--lilac);color:#4a3aa8}
+.two{display:grid;grid-template-columns:1.4fr 1fr;gap:18px}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar .input{max-width:260px}
+.switch{display:inline-flex;background:#fff;border:1px solid var(--line);border-radius:999px;padding:3px}
+.switch button{border:0;background:none;padding:6px 14px;border-radius:999px;font-weight:700;font-size:13px;color:var(--ink-2)}
+.switch button.on{background:var(--ink);color:#fff}
+.switch button[disabled]{opacity:.4;cursor:not-allowed}
+
+
+@media (max-width:1100px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}.co{grid-template-columns:1fr}.cat{position:static;max-height:none}.kpis{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}
+@media (max-width:760px){.login{grid-template-columns:1fr}.hero{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.form-grid{grid-template-columns:1fr}.form-grid .span2{grid-column:auto}.kv{grid-template-columns:1fr 1fr}.timeline{grid-template-columns:repeat(5,minmax(52px,1fr));overflow-x:auto}.top .who .nm{display:none}}
+@media (max-width:420px){.tiles{grid-template-columns:1fr}.kpis{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="blobs" aria-hidden="true"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div></div>
+<div id="app"><div style="display:grid;place-items:center;min-height:100vh"><div class="logo" style="width:64px;height:64px;font-size:18px"><span>JSH</span></div></div></div>
+<div id="layer"></div>
+<div id="toasts" aria-live="polite"></div>
+<canvas id="confetti"></canvas>
+
+<script>
+(() => {
+"use strict";
+/* ============ utilities ============ */
+const $ = (s, el = document) => el.querySelector(s);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const AUD = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
+const money = n => AUD.format(Number(n) || 0);
+const dfmt = new Intl.DateTimeFormat("en-AU", { day: "2-digit", month: "short", year: "numeric" });
+const dt = s => s ? dfmt.format(new Date(s)) : "—";
+const dtt = s => s ? new Date(s).toLocaleString("en-AU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+const iso = d => new Date(d).toISOString();
+const daysAgo = n => iso(Date.now() - n * 864e5);
+const today = () => new Date().toISOString().slice(0, 10);
+const addDays = (s, n) => iso(new Date(s).getTime() + n * 864e5);
+const clone = o => JSON.parse(JSON.stringify(o));
+const pad = (n, w) => String(n).padStart(w, "0");
+const rnd = n => Math.floor(Math.random() * n);
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const GST = 0.10;
+
+const ICON = {
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  truck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>',
+  inv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 13h7M9 17h5"/></svg>',
+  paid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20M7 15h3"/></svg>',
+  shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>',
+  sync: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/></svg>'
+};
+
+/* ============ demo data ============ */
+const CAT_COL = { Hair: "#ffd3df", Metabolism: "#ffe0c7", Gut: "#c9f0de", Skin: "#e3dbff", Sleep: "#d3e8ff", Wellness: "#fff1b8" };
+function demoState() {
+  const items = [
+    ["JSH-HE60", "Hair + Energy", "Hair", "60 caps"], ["JSH-HEM60", "Hair + Energy For Men", "Hair", "60 caps"],
+    ["JSH-VGS30", "Vita-Growth Peptide Scalp Serum", "Hair", "30 ml"], ["JSH-BER60", "Berberine+", "Metabolism", "60 caps"],
+    ["JSH-MSS60", "Metabolism + Sugar Support", "Metabolism", "60 caps"], ["JSH-THY60", "Thyroid+", "Metabolism", "60 caps"],
+    ["JSH-DD60", "Detox + Debloat", "Gut", "60 caps"], ["JSH-PRO30", "Probiotic (Multi-Strain)", "Gut", "30 caps"],
+    ["JSH-MAG60", "Advanced Magnesium+", "Gut", "60 tabs"], ["JSH-SKB60", "Skin Bright+", "Skin", "60 caps"],
+    ["JSH-COL200", "Pure Marine Collagen", "Skin", "200 g"], ["JSH-ASL60", "Advanced Sleep+", "Sleep", "60 tabs"],
+    ["JSH-DSL60", "Deep Sleep+", "Sleep", "60 caps"], ["JSH-IMM60", "Immune+", "Wellness", "60 caps"],
+    ["JSH-TUR60", "Turmeric+", "Wellness", "60 tabs"], ["JSH-NMN30", "NMN 500 + Resveratrol", "Wellness", "30 caps"]
+  ].map(([no, desc, cat, pack]) => ({ no, desc, cat, pack, uom: "BTL", caseQty: 12, blocked: false }));
+  const base = { "JSH-HE60": 32.5, "JSH-HEM60": 32.5, "JSH-VGS30": 41, "JSH-BER60": 36, "JSH-MSS60": 29.5, "JSH-THY60": 31, "JSH-DD60": 27, "JSH-PRO30": 33, "JSH-MAG60": 24.5, "JSH-SKB60": 34, "JSH-COL200": 38.5, "JSH-ASL60": 30, "JSH-DSL60": 28, "JSH-IMM60": 25, "JSH-TUR60": 26.5, "JSH-NMN30": 55 };
+  const gold = ["JSH-HE60", "JSH-HEM60", "JSH-VGS30", "JSH-BER60", "JSH-MSS60", "JSH-DD60", "JSH-PRO30", "JSH-MAG60", "JSH-SKB60", "JSH-COL200", "JSH-ASL60", "JSH-DSL60", "JSH-IMM60"];
+  const std = ["JSH-HE60", "JSH-BER60", "JSH-DD60", "JSH-PRO30", "JSH-SKB60", "JSH-DSL60", "JSH-IMM60", "JSH-TUR60", "JSH-NMN30"];
+  const priceLists = [
+    ...gold.map(no => ({ group: "PHARM-GOLD", itemNo: no, unitPrice: +(base[no] * 0.92).toFixed(2), minQty: 6, startDate: "2026-07-01" })),
+    ...std.map(no => ({ group: "RETAIL-STD", itemNo: no, unitPrice: base[no], minQty: 12, startDate: "2026-07-01" }))
+  ];
+  const customers = [
+    { no: "C10010", name: "Wellness Pharmacy Group Pty Ltd", priceGroup: "PHARM-GOLD", contact: "Priya Shah", email: "orders@wellnesspharmacy.example", phone: "02 9000 1234", billTo: "Level 4, 12 Harbour St, Sydney NSW 2000", shipTo: "Central DC, 45 Logistics Way, Eastern Creek NSW 2766", terms: "30 DAYS", location: "MAIN", active: true },
+    { no: "C10020", name: "Bloom Health Stores", priceGroup: "RETAIL-STD", contact: "Tom Nguyen", email: "buying@bloomhealth.example", phone: "03 9000 5678", billTo: "88 Chapel St, Windsor VIC 3181", shipTo: "88 Chapel St, Windsor VIC 3181", terms: "14 DAYS", location: "MAIN", active: true }
+  ];
+  const users = [
+    { id: "u-admin", username: "admin", password: "Portal@Admin1", name: "Portal Admin", role: "admin", customerNo: "", active: true },
+    { id: "u-wpg", username: "wpg.buyer", password: "Portal@Trial1", name: "Priya Shah", role: "customer", customerNo: "C10010", active: true }
+  ];
+  const s = { version: 1, settings: { env: "demo", next: { portal: 101, so: 104230, inv: 208810, qbt: 55010 }, lastSync: daysAgo(0.02) }, items, priceLists, customers, users, orders: [], log: [] };
+  const price = (g, no) => priceLists.find(p => p.group === g && p.itemNo === no).unitPrice;
+  const mk = (cust, stage, ago, lines, extra = {}) => {
+    const c = customers.find(x => x.no === cust);
+    const o = newOrderShell(s, c, users[1]);
+    o.createdAt = daysAgo(ago);
+    o.header.orderDate = o.createdAt.slice(0, 10);
+    o.header.requestedDeliveryDate = addDays(o.createdAt, 7).slice(0, 10);
+    o.header.customerPO = "PO-" + (48120 + s.orders.length * 7);
+    o.lines = lines.map(([no, q], i) => { const it = items.find(x => x.no === no); return { lineNo: (i + 1) * 10000, itemNo: no, desc: it.desc, uom: it.uom, qty: q, unitPrice: price(c.priceGroup, no) }; });
+    o.bc.soNo = "SO-" + s.settings.next.so++; o.bc.submittedAt = o.createdAt; o.bc.status = "Open"; o.bc.reviewed = "";
+    const order = ["submitted", "released", "confirmed", "shipped", "invoiced", "paid"];
+    const at = order.indexOf(stage);
+    if (at >= 1) { o.bc.status = "Released"; o.bc.releasedAt = addDays(o.createdAt, 0.2); }
+    if (at >= 2) { o.bc.reviewed = "Reviewed"; o.bc.reviewedAt = addDays(o.createdAt, 0.4); }
+    if (at >= 3) o.shipments = [makeShipment(s, o, addDays(o.createdAt, 2))];
+    if (at >= 4) o.invoice = makeInvoice(s, o, addDays(o.createdAt, extra.invAfter ?? 3), c.terms);
+    if (at >= 5) { o.invoice.remaining = 0; o.invoice.paidAt = addDays(o.invoice.date, extra.paidAfter ?? 20); }
+    s.orders.push(o);
+  };
+  mk("C10010", "paid", 62, [["JSH-HE60", 48], ["JSH-COL200", 24], ["JSH-PRO30", 36]]);
+  mk("C10010", "paid", 41, [["JSH-BER60", 36], ["JSH-DD60", 24]], { paidAfter: 26 });
+  mk("C10010", "invoiced", 38, [["JSH-SKB60", 24], ["JSH-MAG60", 48], ["JSH-DSL60", 12]], { invAfter: 2 });
+  mk("C10010", "invoiced", 9, [["JSH-HEM60", 24], ["JSH-HE60", 36]]);
+  mk("C10010", "shipped", 6, [["JSH-ASL60", 24], ["JSH-IMM60", 36], ["JSH-PRO30", 12]]);
+  mk("C10010", "shipped", 4, [["JSH-VGS30", 12], ["JSH-COL200", 18]]);
+  mk("C10010", "confirmed", 3, [["JSH-MSS60", 24], ["JSH-BER60", 24]]);
+  mk("C10010", "confirmed", 2, [["JSH-DD60", 36]]);
+  mk("C10010", "released", 1, [["JSH-HE60", 60], ["JSH-SKB60", 24]]);
+  mk("C10010", "submitted", 0.1, [["JSH-MAG60", 24], ["JSH-DSL60", 24], ["JSH-IMM60", 12]]);
+  mk("C10020", "confirmed", 2, [["JSH-NMN30", 12], ["JSH-TUR60", 24]]);
+  mk("C10020", "invoiced", 12, [["JSH-HE60", 24]]);
+  s.log.unshift({ ts: iso(Date.now()), actor: "System", type: "admin", text: "Demo data loaded" });
+  return s;
+}
+function newOrderShell(s, c, user) {
+  const portalNo = "WEB-" + pad(s.settings.next.portal++, 6);
+  return {
+    portalNo, customerNo: c.no, createdBy: user ? user.name : "", createdAt: iso(Date.now()),
+    header: { orderDate: today(), requestedDeliveryDate: addDays(Date.now(), 7).slice(0, 10), customerPO: "", contact: c.contact, email: c.email, phone: c.phone, shipTo: c.shipTo, billTo: c.billTo, terms: c.terms, location: c.location, priceGroup: c.priceGroup, notes: "" },
+    lines: [], bc: { soNo: "", status: "", reviewed: "", submittedAt: "", releasedAt: "", reviewedAt: "" }, shipments: [], invoice: null
+  };
+}
+function makeShipment(s, o, date) {
+  const ym = new Date(date).toISOString().slice(2, 7).replace("-", "");
+  const lines = [];
+  o.lines.forEach((l, i) => {
+    if (i === 0 && l.qty >= 24) { const a = Math.round(l.qty / 2); lines.push({ itemNo: l.itemNo, lotNo: `L${ym}-${1000 + rnd(9000)}`, qty: a }); lines.push({ itemNo: l.itemNo, lotNo: `L${ym}-${1000 + rnd(9000)}`, qty: l.qty - a }); }
+    else lines.push({ itemNo: l.itemNo, lotNo: `L${ym}-${1000 + rnd(9000)}`, qty: l.qty });
+  });
+  return { qbtNo: "QBT-" + s.settings.next.qbt++, soNo: o.bc.soNo, date, lines };
+}
+function makeInvoice(s, o, date, terms) {
+  const t = totals(o.lines); const days = parseInt(terms) || 30;
+  return { no: "PSI-" + s.settings.next.inv++, soNo: o.bc.soNo, portalNo: o.portalNo, date, dueDate: addDays(date, days), amount: t.total, remaining: t.total, paidAt: "" };
+}
+function totals(lines) { const sub = lines.reduce((a, l) => a + l.qty * l.unitPrice, 0); const gst = +(sub * GST).toFixed(2); return { sub: +sub.toFixed(2), gst, total: +(sub + gst).toFixed(2), units: lines.reduce((a, l) => a + Number(l.qty), 0) }; }
+
+/* ============ stage logic (mirrors BC rules) ============ */
+// Confirmed = Status "Released" AND Order Reviewed = "Reviewed". Shipped = a QBT record exists for the SO. Paid = invoice remaining = 0.
+function stage(o) {
+  if (!o.bc.soNo) return "draft";
+  if (o.invoice && o.invoice.remaining <= 0) return "paid";
+  if (o.invoice) return "invoiced";
+  if (o.shipments && o.shipments.length) return "shipped";
+  if (o.bc.status === "Released" && o.bc.reviewed === "Reviewed") return "confirmed";
+  return "submitted";
+}
+const STAGE_LABEL = { submitted: "Awaiting confirmation", confirmed: "Confirmed", shipped: "Shipped", invoiced: "To be paid", paid: "Paid", draft: "Draft" };
+const STAGES = ["submitted", "confirmed", "shipped", "invoiced", "paid"];
+const isOverdue = o => o.invoice && o.invoice.remaining > 0 && new Date(o.invoice.dueDate) < new Date();
+const editable = o => o.bc.soNo && o.bc.status === "Open" && !o.shipments.length && !o.invoice;
+function pill(o) { const st = stage(o); if (st === "invoiced" && isOverdue(o)) return `<span class="pill st-overdue">Overdue</span>`; return `<span class="pill st-${st}">${STAGE_LABEL[st]}</span>`; }
+function pipe(o) { const i = STAGES.indexOf(stage(o)); return `<div class="pipe" aria-label="${STAGE_LABEL[stage(o)]}">${STAGES.map((_, k) => `<i class="${k <= i ? "on" : ""} ${k === i && i < 4 ? "now" : ""}"></i>`).join("")}</div>`; }
+
+/* ============ store: artifact db → localStorage → memory ============ */
+const LS_KEY = "jsh-portal-state-v1";
+const Store = {
+  state: null, db: null, ref: null, mode: "memory", lastJSON: "", writing: false, dirty: false,
+  async init() {
+    let db = null;
+    try { if (window.claude && claude.use) db = await Promise.race([claude.use("db"), new Promise(r => setTimeout(() => r(null), 6000))]); } catch (e) { db = null; }
+    if (db) {
+      this.db = db; this.ref = db.doc("portal/state");
+      try {
+        const snap = await Promise.race([this.ref.get(), new Promise((_, j) => setTimeout(() => j(new Error("timeout")), 10000))]);
+        if (snap.exists) { this.state = clone(snap.data().s); }
+        this.mode = "cloud";
+        this.ref.onSnapshot(sn => {
+          if (!sn.exists || sn.metadata.hasPendingWrites) return;
+          const j = JSON.stringify(sn.data().s); if (j === this.lastJSON) return;
+          this.lastJSON = j; this.state = JSON.parse(j); onRemoteChange();
+        }, () => {});
+      } catch (e) { this.db = null; this.ref = null; }
+    }
+    if (!this.state && this.mode !== "cloud") { try { const raw = localStorage.getItem(LS_KEY); if (raw) { this.state = JSON.parse(raw); this.mode = "local"; } } catch (e) {} }
+    if (!this.state) { this.state = demoState(); await this.save(); }
+    if (this.mode === "memory") { try { localStorage.setItem(LS_KEY + "-t", "1"); localStorage.removeItem(LS_KEY + "-t"); this.mode = "local"; this.save(); } catch (e) {} }
+  },
+  async save() {
+    const j = JSON.stringify(this.state); this.lastJSON = j;
+    if (this.ref) {
+      if (this.writing) { this.dirty = true; return; }
+      this.writing = true;
+      try { await this.ref.set({ s: JSON.parse(j) }); }
+      catch (e) { if (e && e.code === "quota_exceeded") toast("Storage is full. Clear old orders in Settings."); else if (e && e.code === "invalid_argument") toast("You have view-only access, so changes are not saved."); }
+      this.writing = false;
+      if (this.dirty) { this.dirty = false; return this.save(); }
+      return;
+    }
+    try { localStorage.setItem(LS_KEY, j); } catch (e) {}
+  }
+};
+function log(type, text) { const S = Store.state; S.log.unshift({ ts: iso(Date.now()), actor: me() ? me().name : "System", type, text }); S.log = S.log.slice(0, 200); }
+
+/* ============ BC adapter (demo mock — same call shapes as the real API) ============ */
+// Each method maps to the API call the live connector will make. In Demo it runs against the portal store.
+const BC = {
+  getPriceList(priceGroup) { // CUSTOM API GET .../customerPriceLists?$filter=customerPriceGroup eq '{group}'
+    log("get", `GET customerPriceLists?$filter=customerPriceGroup eq '${priceGroup}'`);
+    const S = Store.state;
+    return S.priceLists.filter(p => p.group === priceGroup).map(p => ({ ...p, item: S.items.find(i => i.no === p.itemNo) })).filter(p => p.item && !p.item.blocked);
+  },
+  async postSalesOrder(order) { // CUSTOM API POST .../portalSalesOrders (header + lines deep insert) → returns BC "No."
+    await wait(450);
+    const S = Store.state; const soNo = "SO-" + S.settings.next.so++;
+    log("post", `POST portalSalesOrders {portalOrderNo:'${order.portalNo}', lines:${order.lines.length}} → ${soNo}`);
+    return { number: soNo, status: "Open", orderReviewed: "" };
+  },
+  async patchSalesOrder(order) { await wait(350); log("patch", `PATCH portalSalesOrders('${order.bc.soNo}') lines:${order.lines.length} (status Open)`); return true; },
+  refresh(customerNo) { // read-only status sync
+    log("get", `GET portalSalesOrders?$filter=customerNo eq '${customerNo}' (status, orderReviewed)`);
+    log("get", `GET qbtShipments?$filter=salesOrderNo in (…) (lot no., qty)`);
+    log("get", `GET salesInvoices?$filter=customerNumber eq '${customerNo}' (remainingAmount)`);
+    Store.state.settings.lastSync = iso(Date.now());
+  }
+};
+const wait = ms => new Promise(r => setTimeout(r, reduced ? 0 : ms));
+
+/* ============ session & routing ============ */
+const SKEY = "jsh-portal-session";
+let session = (() => { try { return JSON.parse(sessionStorage.getItem(SKEY)) || null; } catch (e) { return null; } })();
+const saveSession = () => { try { session ? sessionStorage.setItem(SKEY, JSON.stringify(session)) : sessionStorage.removeItem(SKEY); } catch (e) {} };
+const me = () => session && Store.state ? Store.state.users.find(u => u.id === session.userId && u.active) : null;
+const isAdmin = () => me() && me().role === "admin";
+const activeCustomerNo = () => isAdmin() ? session.viewAs || "" : me() ? me().customerNo : "";
+const custView = () => !!activeCustomerNo();
+const customer = no => Store.state.customers.find(c => c.no === no);
+let route = { page: "home", sub: "" };
+let draft = null; // order being created / edited
+let ui = { confFilter: "confirmed", adminFilter: "all", search: "", itemGroup: "PHARM-GOLD", catSearch: "", catCat: "All" };
+
+function go(page, sub = "") { route = { page, sub }; try { history.replaceState(null, "", "#" + page); } catch (e) {} render(); window.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" }); }
+function onRemoteChange() { if (route.page === "create") return; render(); }
+
+/* ============ render root ============ */
+function render() {
+  const app = $("#app");
+  if (!me()) { app.innerHTML = loginView(); bindLogin(); return; }
+  const cust = custView();
+  if (!cust && !route.page.startsWith("admin")) route.page = "admin-overview";
+  if (cust && route.page.startsWith("admin")) route.page = "home";
+  app.innerHTML = shell(cust ? customerPage() : adminPage());
+  afterRender();
+}
+function afterRender() {
+  document.querySelectorAll("[data-count]").forEach(el => countUp(el, Number(el.dataset.count), el.dataset.fmt));
+  if (route.page === "create") bindCreate();
+}
+function countUp(el, to, fmt) {
+  const f = v => fmt === "money" ? money(v) : Math.round(v).toLocaleString("en-AU");
+  if (reduced || !to) { el.textContent = f(to); return; }
+  const t0 = performance.now(), d = 700;
+  const step = t => { const p = Math.min(1, (t - t0) / d); el.textContent = f(to * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+
+/* ============ login ============ */
+function loginView() {
+  return `<div class="login">
+    <div class="login-hero">
+      <div class="badge" style="display:inline-block;margin-bottom:18px">Prototype · demo data</div>
+      <h1>Wholesale ordering,<br><span class="grad-text">beautifully simple.</span></h1>
+      <p class="muted" style="font-size:17px;max-width:46ch;margin-top:14px">Place orders against your price list, follow them from confirmation to delivery, and keep track of invoices. Every order goes straight into Business Central.</p>
+      <div class="hero-pills">
+        <div class="hero-pill" style="animation-delay:.1s"><span class="dot" style="background:var(--s-conf)"></span>Live order status</div>
+        <div class="hero-pill" style="animation-delay:.2s"><span class="dot" style="background:var(--s-ship)"></span>Lot numbers on every shipment</div>
+        <div class="hero-pill" style="animation-delay:.3s"><span class="dot" style="background:var(--s-inv)"></span>Invoices in one place</div>
+      </div>
+    </div>
+    <div class="login-card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px"><div class="logo"><span>JSH</span></div><div><h2 style="font-size:22px">JSH Trade Portal</h2><div class="faint" style="font-size:13px">Sign in to your account</div></div></div>
+      <form id="loginForm" autocomplete="on" style="margin-top:18px">
+        <div class="field"><label for="lu">Username</label><input class="input" id="lu" name="username" autocomplete="username" required></div>
+        <div class="field"><label for="lp">Password</label><input class="input" id="lp" name="password" type="password" autocomplete="current-password" required></div>
+        <div class="err" id="lerr" role="alert"></div>
+        <button class="btn primary" type="submit" style="justify-content:center;padding:13px">Sign in</button>
+      </form>
+      <details style="margin-top:18px;font-size:13px"><summary class="muted" style="cursor:pointer;font-weight:700">Prototype sign-ins</summary>
+        <div class="chips" style="margin-top:10px">
+          <button class="chip" data-fill="admin|Portal@Admin1" type="button">Admin · admin</button>
+          <button class="chip" data-fill="wpg.buyer|Portal@Trial1" type="button">Customer · wpg.buyer</button>
+        </div>
+        <p class="faint" style="margin:10px 0 0">Prototype only. The production portal will use Microsoft Entra External ID sign-in.</p>
+      </details>
+    </div>
+  </div>`;
+}
+function bindLogin() {
+  $("#loginForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const u = $("#lu").value.trim().toLowerCase(), p = $("#lp").value;
+    const user = Store.state.users.find(x => x.username.toLowerCase() === u && x.password === p);
+    if (!user) { $("#lerr").textContent = "That username and password don't match. Check them and try again."; $(".login-card").animate([{ transform: "translateX(0)" }, { transform: "translateX(-8px)" }, { transform: "translateX(8px)" }, { transform: "translateX(0)" }], { duration: 300 }); return; }
+    if (!user.active || (user.role === "customer" && !(customer(user.customerNo) || {}).active)) { $("#lerr").textContent = "This account is disabled. Ask your JSH contact to re-enable it."; return; }
+    session = { userId: user.id, viewAs: "" }; saveSession();
+    log("auth", `${user.name} signed in`); Store.save();
+    route = { page: user.role === "admin" ? "admin-overview" : "home", sub: "" };
+    render(); toast(`Welcome, ${user.name.split(" ")[0]}`);
+  });
+  document.querySelectorAll("[data-fill]").forEach(b => b.addEventListener("click", () => { const [u, p] = b.dataset.fill.split("|"); $("#lu").value = u; $("#lp").value = p; }));
+}
+
+/* ============ shell ============ */
+function shell(inner) {
+  const u = me(), cust = custView(), S = Store.state;
+  const c = cust ? customer(activeCustomerNo()) : null;
+  const navC = [["home", "Home"], ["create", "Create Order"], ["confirmed", "Confirmed Orders"], ["shipped", "Orders Shipped"], ["topay", "Invoices To Be Paid"], ["paid", "Invoices Paid"]];
+  const navA = [["admin-overview", "Overview"], ["admin-orders", "Orders"], ["admin-customers", "Customers"], ["admin-items", "Items & Price Lists"], ["admin-users", "Users"], ["admin-settings", "Settings"]];
+  const nav = cust ? navC : navA;
+  return `${isAdmin() && cust ? `<div class="viewas">Previewing as ${esc(c ? c.name : "")} <button data-act="exit-viewas">Back to admin</button></div>` : ""}
+  <header class="top">
+    <button class="brand" data-go="${cust ? "home" : "admin-overview"}"><div class="logo"><span>JSH</span></div><span>Trade Portal</span></button>
+    <span class="badge env-demo" title="Data source">${S.settings.env === "demo" ? "Demo data" : esc(S.settings.env)}</span>
+    <div class="sp"></div>
+    ${cust ? `<button class="btn sm ghost" data-act="sync" title="Read latest status from Business Central">${ICON.sync}<span>Refresh</span></button>` : ""}
+    <div class="who"><div class="avatar">${esc(u.name.split(" ").map(x => x[0]).join("").slice(0, 2))}</div><div class="nm"><div style="font-weight:700;font-size:14px">${esc(u.name)}</div><div class="faint" style="font-size:12px">${esc(cust && c ? c.name : "Administrator")}</div></div></div>
+    <button class="btn sm ghost" data-act="logout">Sign out</button>
+  </header>
+  <nav class="nav" aria-label="Main">${nav.map(([k, l]) => `<button data-go="${k}" class="${route.page === k ? "on" : ""}">${l}</button>`).join("")}</nav>
+  <main class="main">${inner}</main>`;
+}
+
+/* ============ customer pages ============ */
+function myOrders() { const no = activeCustomerNo(); return Store.state.orders.filter(o => o.customerNo === no); }
+function customerPage() {
+  switch (route.page) {
+    case "create": return createView();
+    case "confirmed": return confirmedView();
+    case "shipped": return listView("shipped");
+    case "topay": return invoiceView("invoiced");
+    case "paid": return invoiceView("paid");
+    default: return homeView();
+  }
+}
+function homeView() {
+  const os = myOrders(), c = customer(activeCustomerNo()), u = me();
+  const cnt = st => os.filter(o => stage(o) === st).length;
+  const due = os.filter(o => stage(o) === "invoiced");
+  const owing = due.reduce((a, o) => a + o.invoice.remaining, 0);
+  const overdue = due.filter(isOverdue).length;
+  const hr = new Date().getHours(); const greet = hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
+  const recent = [...os].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6);
+  return `<div class="grid anim">
+    <section class="hero"><div class="ring" aria-hidden="true"></div>
+      <div style="position:relative"><div class="faint" style="font-weight:700">${esc(c.name)} · ${esc(c.no)}</div><h1>${greet}, ${esc(isAdmin() ? c.contact.split(" ")[0] : u.name.split(" ")[0])}.</h1>
+        <p class="muted" style="margin:8px 0 16px;max-width:52ch">You have <b>${cnt("submitted")}</b> order${cnt("submitted") === 1 ? "" : "s"} awaiting confirmation and <b>${cnt("shipped")}</b> on the way.</p>
+        <button class="btn primary" data-go="create">${ICON.plus.replace("<svg", '<svg width="18" height="18"')} Create order</button></div>
+      <div class="hero-stats">
+        <div class="hstat"><span>Outstanding</span><b class="num" data-count="${owing}" data-fmt="money">${money(owing)}</b></div>
+        <div class="hstat"><span>Overdue invoices</span><b class="num" style="color:${overdue ? "var(--s-inv)" : "inherit"}" data-count="${overdue}">${overdue}</b></div>
+        <div class="hstat"><span>Price list</span><b style="font-size:17px">${esc(c.priceGroup)}</b></div>
+        <div class="hstat"><span>Last synced</span><b style="font-size:17px">${dtt(Store.state.settings.lastSync)}</b></div>
+      </div>
+    </section>
+    <section class="tiles">
+      ${tile("create", "t-create", ICON.plus, "Create Order", "", "Start a new order")}
+      ${tile("confirmed", "t-conf", ICON.check, "Confirmed Orders", cnt("confirmed"), `${cnt("submitted")} awaiting confirmation`)}
+      ${tile("shipped", "t-ship", ICON.truck, "Orders Shipped", cnt("shipped"), "With lot numbers")}
+      ${tile("topay", "t-inv", ICON.inv, "Invoices To Be Paid", cnt("invoiced"), money(owing))}
+      ${tile("paid", "t-paid", ICON.paid, "Invoices Paid", cnt("paid"), "Payment history")}
+    </section>
+    <section class="card"><div class="page-head" style="margin-bottom:6px"><h2 style="font-size:20px">Recent orders</h2><span class="faint" style="font-size:13px">Submitted → Confirmed → Shipped → Invoiced → Paid</span></div>
+      ${ordersTable(recent, true)}</section>
+  </div>`;
+}
+function tile(goTo, cls, icon, title, count, sub) {
+  return `<button class="tile ${cls}" data-go="${goTo}"><div class="ico">${icon}</div><div><h3>${title}</h3>${count !== "" ? `<div class="count num" data-count="${count}">${count}</div>` : ""}<div class="sub">${esc(sub)}</div></div></button>`;
+}
+function ordersTable(list, withPipe, admin) {
+  if (!list.length) return `<div class="empty"><div class="big">🌿</div>Nothing here yet.</div>`;
+  return `<div class="tbl-wrap"><table><thead><tr><th>Portal order</th><th>BC order</th>${admin ? "<th>Customer</th>" : ""}<th>Date</th><th>Your PO</th><th class="r">Units</th><th class="r">Total inc GST</th><th>Status</th>${withPipe ? "<th>Progress</th>" : ""}</tr></thead><tbody>
+  ${list.map((o, i) => { const t = totals(o.lines); return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * 0.03}s"><td class="mono"><b>${esc(o.portalNo)}</b></td><td class="mono">${esc(o.bc.soNo || "—")}</td>${admin ? `<td>${esc(customer(o.customerNo)?.name || o.customerNo)}</td>` : ""}<td>${dt(o.createdAt)}</td><td>${esc(o.header.customerPO || "—")}</td><td class="r num">${t.units}</td><td class="r num">${money(t.total)}</td><td>${pill(o)}</td>${withPipe ? `<td>${pipe(o)}</td>` : ""}</tr>`; }).join("")}
+  </tbody></table></div>`;
+}
+function confirmedView() {
+  const os = myOrders(); const pend = os.filter(o => stage(o) === "submitted"), conf = os.filter(o => stage(o) === "confirmed");
+  const list = (ui.confFilter === "confirmed" ? conf : pend).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return `<div class="page-head"><div><button class="crumb" data-go="home">← Home</button><h1>Confirmed Orders</h1><p class="muted" style="margin:4px 0 0">An order is confirmed once JSH has released and reviewed it in Business Central. After that it can't be changed.</p></div>
+    <div class="switch" role="tablist"><button class="${ui.confFilter === "confirmed" ? "on" : ""}" data-conf="confirmed">Confirmed (${conf.length})</button><button class="${ui.confFilter === "pending" ? "on" : ""}" data-conf="pending">Awaiting confirmation (${pend.length})</button></div></div>
+    <section class="card">${ordersTable(list, true)}</section>`;
+}
+function listView(st) {
+  const list = myOrders().filter(o => stage(o) === st).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const rows = list.map((o, i) => { const sh = o.shipments[o.shipments.length - 1]; const t = totals(o.lines); return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * .03}s"><td class="mono"><b>${esc(o.portalNo)}</b></td><td class="mono">${esc(o.bc.soNo)}</td><td class="mono">${esc(sh.qbtNo)}</td><td>${dt(sh.date)}</td><td>${esc(o.header.customerPO || "—")}</td><td>${[...new Set(sh.lines.map(l => l.lotNo))].slice(0, 3).map(l => `<span class="lot">${esc(l)}</span>`).join("")}${sh.lines.length > 3 ? `<span class="faint">+${sh.lines.length - 3}</span>` : ""}</td><td class="r num">${money(t.total)}</td></tr>`; }).join("");
+  return `<div class="page-head"><div><button class="crumb" data-go="home">← Home</button><h1>Orders Shipped</h1><p class="muted" style="margin:4px 0 0">Shipped orders with the lot numbers and quantities that left the warehouse. Open an order to see lots line by line.</p></div></div>
+  <section class="card">${list.length ? `<div class="tbl-wrap"><table><thead><tr><th>Portal order</th><th>BC order</th><th>Shipment</th><th>Shipped</th><th>Your PO</th><th>Lots</th><th class="r">Total inc GST</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty"><div class="big">🚚</div>No orders are in transit right now.</div>`}</section>`;
+}
+function invoiceView(st) {
+  const list = myOrders().filter(o => stage(o) === st).sort((a, b) => b.invoice.date.localeCompare(a.invoice.date));
+  const sum = list.reduce((a, o) => a + (st === "paid" ? o.invoice.amount : o.invoice.remaining), 0);
+  const rows = list.map((o, i) => { const v = o.invoice; return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * .03}s"><td class="mono"><b>${esc(v.no)}</b></td><td class="mono">${esc(o.bc.soNo)}</td><td class="mono">${esc(o.portalNo)}</td><td>${dt(v.date)}</td><td>${st === "paid" ? dt(v.paidAt) : `${dt(v.dueDate)} ${isOverdue(o) ? '<span class="pill st-overdue" style="margin-left:4px">Overdue</span>' : ""}`}</td><td class="r num">${money(v.amount)}</td>${st === "paid" ? "" : `<td class="r num"><b>${money(v.remaining)}</b></td><td class="r"><button class="btn sm primary" data-pay="${esc(o.portalNo)}">Pay now</button></td>`}</tr>`; }).join("");
+  return `<div class="page-head"><div><button class="crumb" data-go="home">← Home</button><h1>${st === "paid" ? "Invoices Paid" : "Invoices To Be Paid"}</h1><p class="muted" style="margin:4px 0 0">${st === "paid" ? "Invoices that have been settled in full." : "Posted invoices with an outstanding balance. Each one shows its BC sales order and portal order number."}</p></div>
+  <div class="card" style="padding:12px 18px"><div class="faint" style="font-size:12px;font-weight:700;text-transform:uppercase">${st === "paid" ? "Total paid" : "Total outstanding"}</div><div class="num" style="font-family:var(--display);font-size:24px;font-weight:800" data-count="${sum}" data-fmt="money">${money(sum)}</div></div></div>
+  <section class="card">${list.length ? `<div class="tbl-wrap"><table><thead><tr><th>Invoice</th><th>BC order</th><th>Portal order</th><th>Invoice date</th><th>${st === "paid" ? "Paid on" : "Due"}</th><th class="r">Amount</th>${st === "paid" ? "" : '<th class="r">Balance</th><th></th>'}</tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty"><div class="big">${st === "paid" ? "💸" : "🎉"}</div>${st === "paid" ? "No paid invoices yet." : "You're all paid up."}</div>`}</section>`;
+}
+
+/* ============ create / edit order ============ */
+function startDraft(existing) {
+  const S = Store.state; const c = customer(activeCustomerNo());
+  if (existing) { draft = clone(existing); draft._editing = true; }
+  else { draft = newOrderShell(S, c, me()); draft._editing = false; Store.save(); }
+  go("create");
+}
+function createView() {
+  if (!draft) { const S = Store.state; draft = newOrderShell(S, customer(activeCustomerNo()), me()); Store.save(); }
+  const c = customer(draft.customerNo); const pl = BC.getPriceList(c.priceGroup);
+  const cats = ["All", ...new Set(pl.map(p => p.item.cat))];
+  const h = draft.header;
+  return `<div class="page-head"><div><button class="crumb" data-act="cancel-draft">← ${draft._editing ? "Cancel edit" : "Home"}</button><h1>${draft._editing ? "Edit order" : "Create Order"}</h1></div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="faint" style="font-size:13px;font-weight:700">Portal order no.</span><span class="order-no">${esc(draft.portalNo)}</span>${draft._editing ? `<span class="order-no" style="background:var(--violet)">${esc(draft.bc.soNo)}</span>` : ""}</div></div>
+  <div class="co">
+    <div class="grid">
+      <section class="card"><h3 style="font-size:17px;margin-bottom:14px">Order details</h3>
+        <div class="form-grid">
+          <div class="field prefill"><label for="f-cust">Customer</label><input class="input" id="f-cust" readonly value="${esc(c.no + " · " + c.name)}"></div>
+          <div class="field"><label for="f-date">Order date</label><input class="input" id="f-date" type="date" readonly value="${esc(h.orderDate)}"></div>
+          <div class="field"><label for="f-req">Requested delivery</label><input class="input" id="f-req" type="date" data-h="requestedDeliveryDate" min="${today()}" value="${esc(h.requestedDeliveryDate)}"></div>
+          <div class="field"><label for="f-po">Your PO number</label><input class="input" id="f-po" data-h="customerPO" maxlength="35" placeholder="e.g. PO-48211" value="${esc(h.customerPO)}"></div>
+          <div class="field"><label for="f-contact">Contact</label><input class="input" id="f-contact" data-h="contact" value="${esc(h.contact)}"></div>
+          <div class="field"><label for="f-email">Email</label><input class="input" id="f-email" type="email" data-h="email" value="${esc(h.email)}"></div>
+          <div class="field prefill span2"><label for="f-ship">Ship-to address</label><input class="input" id="f-ship" readonly value="${esc(h.shipTo)}"></div>
+          <div class="field prefill"><label for="f-terms">Payment terms</label><input class="input" id="f-terms" readonly value="${esc(h.terms)}"></div>
+          <div class="field span3"><label for="f-notes">Delivery notes</label><textarea class="input" id="f-notes" data-h="notes" rows="2" maxlength="250" placeholder="Dock hours, special instructions…">${esc(h.notes)}</textarea></div>
+        </div></section>
+      <section class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="font-size:17px">Order lines</h3><span class="faint" style="font-size:13px">Price list ${esc(c.priceGroup)} · prices ex GST</span></div>
+        <div id="lines">${linesTable()}</div>
+        <div class="rule" style="margin-top:14px">${ICON.shield}<span>Only items on your price list can be ordered. Your order is created in Business Central when you press <b>${draft._editing ? "Save changes" : "Submit order"}</b>, and only then.</span></div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap"><button class="btn ghost" data-act="cancel-draft">Cancel</button><button class="btn primary" id="submitBtn" data-act="submit-order" ${draft.lines.length ? "" : "disabled"}>${draft._editing ? "Save changes" : "Submit order"} →</button></div>
+      </section>
+    </div>
+    <aside class="card cat"><h3 style="font-size:17px">Your price list</h3><div class="faint" style="font-size:13px">${pl.length} items available to ${esc(c.name)}</div>
+      <input class="input" id="catSearch" placeholder="Search items" value="${esc(ui.catSearch)}" style="margin-top:12px" aria-label="Search items">
+      <div class="chips" style="margin-top:10px">${cats.map(k => `<button class="chip ${ui.catCat === k ? "on" : ""}" data-cat="${esc(k)}">${esc(k)}</button>`).join("")}</div>
+      <div class="cat-list" id="catList">${catList(pl)}</div>
+    </aside>
+  </div>`;
+}
+function catList(pl) {
+  const q = ui.catSearch.trim().toLowerCase();
+  const list = pl.filter(p => (ui.catCat === "All" || p.item.cat === ui.catCat) && (!q || (p.item.desc + " " + p.itemNo).toLowerCase().includes(q)));
+  if (!list.length) return `<div class="empty">No items match.</div>`;
+  return list.map(p => { const inn = draft.lines.find(l => l.itemNo === p.itemNo); return `<div class="prod"><div class="sw" style="background:${CAT_COL[p.item.cat] || "#eee"}">${esc(p.item.cat.slice(0, 3).toUpperCase())}</div><div><b>${esc(p.item.desc)}</b><small class="mono">${esc(p.itemNo)}</small> <small>· ${esc(p.item.pack)} · min ${p.minQty}</small><div class="num" style="font-weight:800;margin-top:2px">${money(p.unitPrice)} <small>/ ${esc(p.item.uom)}</small></div></div><button class="add ${inn ? "in" : ""}" data-add="${esc(p.itemNo)}" aria-label="Add ${esc(p.item.desc)}">${inn ? "✓" : "+"}</button></div>`; }).join("");
+}
+function linesTable() {
+  if (!draft.lines.length) return `<div class="empty" style="padding:28px"><div class="big">🛒</div>Add items from your price list to start this order.</div>`;
+  const t = totals(draft.lines);
+  return `<div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Description</th><th>UoM</th><th>Qty</th><th class="r">Unit price</th><th class="r">Line amount</th><th></th></tr></thead><tbody>
+  ${draft.lines.map(l => `<tr style="animation:none"><td class="mono">${esc(l.itemNo)}</td><td>${esc(l.desc)}</td><td>${esc(l.uom)}</td><td><div class="qty"><button data-q="${esc(l.itemNo)}|-1" aria-label="Decrease">−</button><input inputmode="numeric" data-qi="${esc(l.itemNo)}" value="${l.qty}" aria-label="Quantity for ${esc(l.desc)}"><button data-q="${esc(l.itemNo)}|1" aria-label="Increase">+</button></div></td><td class="r num">${money(l.unitPrice)}</td><td class="r num"><b>${money(l.qty * l.unitPrice)}</b></td><td><button class="link" data-rm="${esc(l.itemNo)}" style="color:var(--s-inv)">Remove</button></td></tr>`).join("")}
+  </tbody></table></div>
+  <div class="totals num"><div><span class="muted">Subtotal (${t.units} units)</span><span>${money(t.sub)}</span></div><div><span class="muted">GST 10%</span><span>${money(t.gst)}</span></div><div class="grand"><span>Total</span><span>${money(t.total)}</span></div></div>`;
+}
+function refreshLines() { $("#lines").innerHTML = linesTable(); const c = customer(draft.customerNo); $("#catList").innerHTML = catList(BC.getPriceList(c.priceGroup)); $("#submitBtn").disabled = !draft.lines.length; Store.state.log.shift(); }
+function bindCreate() {
+  document.querySelectorAll("[data-h]").forEach(el => el.addEventListener("input", () => { draft.header[el.dataset.h] = el.value; }));
+  const cs = $("#catSearch"); cs && cs.addEventListener("input", () => { ui.catSearch = cs.value; const c = customer(draft.customerNo); $("#catList").innerHTML = catList(BC.getPriceList(c.priceGroup)); Store.state.log.shift(); });
+  $("#lines").addEventListener("change", e => { const it = e.target.dataset.qi; if (!it) return; const l = draft.lines.find(x => x.itemNo === it); let v = parseInt(e.target.value, 10); if (!(v > 0)) v = 1; l.qty = Math.min(v, 9999); refreshLines(); });
+}
+function addLine(itemNo) {
+  const c = customer(draft.customerNo); const p = BC.getPriceList(c.priceGroup).find(x => x.itemNo === itemNo); Store.state.log.shift();
+  if (!p) { toast("That item isn't on your price list."); return; }
+  const ex = draft.lines.find(l => l.itemNo === itemNo);
+  if (ex) ex.qty += p.minQty; else draft.lines.push({ lineNo: (draft.lines.length + 1) * 10000, itemNo, desc: p.item.desc, uom: p.item.uom, qty: p.minQty, unitPrice: p.unitPrice });
+  refreshLines(); toast(`Added ${p.item.desc}`);
+}
+async function submitOrder() {
+  const c = customer(draft.customerNo);
+  const pl = BC.getPriceList(c.priceGroup);
+  // Re-validate every line against the live price list before posting
+  const bad = draft.lines.filter(l => !pl.find(p => p.itemNo === l.itemNo));
+  if (bad.length) { toast(`Remove ${bad.map(b => b.itemNo).join(", ")}: no longer on your price list.`); return; }
+  if (!draft.lines.length) { toast("Add at least one item."); return; }
+  draft.lines.forEach(l => { l.unitPrice = pl.find(p => p.itemNo === l.itemNo).unitPrice; });
+  const editing = draft._editing;
+  openModal(`<h2 style="font-size:22px">${editing ? "Saving changes" : "Sending to Business Central"}</h2><p class="muted" style="margin:6px 0 0">${esc(draft.portalNo)}</p>
+    <div class="steps"><div class="step" id="s1"><span class="b"></span>Checking items against price list ${esc(c.priceGroup)}</div><div class="step" id="s2"><span class="b"></span>${editing ? "Updating sales order lines" : "Creating sales order header"}</div><div class="step" id="s3"><span class="b"></span>${editing ? "Confirming status is still Open" : `Adding ${draft.lines.length} line${draft.lines.length > 1 ? "s" : ""}`}</div><div class="step" id="s4"><span class="b"></span>Linking portal order to BC order</div></div>`, true);
+  const run = async (id, ms) => { const el = $("#" + id); el.className = "step run"; await wait(ms); el.className = "step ok"; el.querySelector(".b").innerHTML = "✓"; };
+  await run("s1", 450);
+  if (editing) {
+    const live = Store.state.orders.find(o => o.portalNo === draft.portalNo);
+    if (!live || !editable(live)) { closeModal(); toast("This order has been released in BC and can no longer be edited."); draft = null; go("confirmed"); return; }
+    await run("s2", 300); await BC.patchSalesOrder(draft); await run("s3", 250);
+    live.lines = clone(draft.lines); live.header = clone(draft.header); await run("s4", 200);
+    log("admin", `${me().name} edited ${live.portalNo} / ${live.bc.soNo}`);
+  } else {
+    await run("s2", 300);
+    const res = await BC.postSalesOrder(draft);
+    await run("s3", 300);
+    const o = clone(draft); delete o._editing; o.createdAt = iso(Date.now()); o.createdBy = me().name;
+    o.bc = { soNo: res.number, status: res.status, reviewed: res.orderReviewed, submittedAt: iso(Date.now()), releasedAt: "", reviewedAt: "" };
+    Store.state.orders.push(o); draft.bc.soNo = res.number;
+    await run("s4", 250);
+  }
+  await Store.save();
+  const saved = draft; draft = null;
+  openModal(`<div style="text-align:center"><svg class="success-check" viewBox="0 0 84 84"><circle cx="42" cy="42" r="38"/><path d="M26 43l11 11 21-23"/></svg>
+    <h2 style="font-size:24px">${editing ? "Changes saved" : "Order submitted"}</h2>
+    <p class="muted" style="margin:6px 0 0">${editing ? "Your sales order in Business Central has been updated." : "Your order is in Business Central and waiting for JSH to confirm it."}</p>
+    <div class="link-pair"><span class="order-no">${esc(saved.portalNo)}</span><span aria-hidden="true">⇄</span><span class="order-no">${esc(saved.bc.soNo)}</span></div>
+    <div class="faint" style="font-size:13px">Portal order no. ⇄ BC sales order no.</div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:20px;flex-wrap:wrap"><button class="btn ghost" data-act="close-go" data-to="confirmed">View my orders</button><button class="btn primary" data-act="close-new">Create another</button></div></div>`);
+  if (!editing) confetti();
+}
+
+/* ============ order drawer ============ */
+function openOrder(portalNo) {
+  const o = Store.state.orders.find(x => x.portalNo === portalNo); if (!o) return;
+  const st = stage(o), idx = STAGES.indexOf(st), c = customer(o.customerNo), t = totals(o.lines);
+  const sh = o.shipments.flatMap(s => s.lines.map(l => ({ ...l, qbtNo: s.qbtNo, date: s.date })));
+  const dates = [o.bc.submittedAt, st === "submitted" ? "" : (o.bc.reviewedAt || o.bc.releasedAt), o.shipments[0]?.date, o.invoice?.date, o.invoice?.paidAt];
+  const admin = isAdmin() && !custView();
+  $("#layer").innerHTML = `<div class="scrim" data-act="close-layer"></div><aside class="drawer" role="dialog" aria-label="Order ${esc(o.portalNo)}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px"><div><div class="faint" style="font-weight:700;font-size:13px">${esc(c?.name || o.customerNo)}</div><h2 style="font-size:24px">Order ${esc(o.portalNo)}</h2><div style="margin-top:6px">${pill(o)}</div></div><button class="x" data-act="close-layer" aria-label="Close">✕</button></div>
+    <div class="timeline">${["Submitted", "Confirmed", "Shipped", "Invoiced", "Paid"].map((l, k) => `<div class="tl ${k <= idx ? "done" : ""} ${k === idx && k < 4 ? "cur" : ""}"><div class="c">${k <= idx ? "✓" : k + 1}</div>${l}<small>${k <= idx && dates[k] ? dt(dates[k]) : ""}</small></div>`).join("")}</div>
+    <div class="kv"><div><span>Portal order no.</span><b class="mono">${esc(o.portalNo)}</b></div><div><span>BC sales order no.</span><b class="mono">${esc(o.bc.soNo)}</b></div><div><span>Your PO</span><b>${esc(o.header.customerPO || "—")}</b></div>
+      <div><span>BC status</span><b>${esc(o.bc.status || "—")}</b></div><div><span>Order reviewed</span><b>${esc(o.bc.reviewed || "Not yet")}</b></div><div><span>Requested delivery</span><b>${dt(o.header.requestedDeliveryDate)}</b></div>
+      <div style="grid-column:span 2"><span>Ship to</span><b>${esc(o.header.shipTo)}</b></div><div><span>Placed by</span><b>${esc(o.createdBy)}</b></div>
+      ${o.invoice ? `<div><span>Invoice</span><b class="mono">${esc(o.invoice.no)}</b></div><div><span>Due</span><b>${dt(o.invoice.dueDate)}</b></div><div><span>Balance</span><b class="num">${money(o.invoice.remaining)}</b></div>` : ""}</div>
+    ${o.header.notes ? `<p class="muted" style="margin:12px 0 0"><b>Notes:</b> ${esc(o.header.notes)}</p>` : ""}
+    <h3 style="font-size:16px;margin:22px 0 8px">Lines${sh.length ? " and shipped lots" : ""}</h3>
+    <div class="card" style="padding:6px 8px"><div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Description</th><th class="r">Ordered</th>${sh.length ? '<th class="r">Shipped</th><th>Lot no. × qty</th>' : ""}<th class="r">Amount</th></tr></thead><tbody>
+      ${o.lines.map(l => { const ls = sh.filter(s => s.itemNo === l.itemNo); const q = ls.reduce((a, s) => a + s.qty, 0); return `<tr style="animation:none"><td class="mono">${esc(l.itemNo)}</td><td>${esc(l.desc)}</td><td class="r num">${l.qty}</td>${sh.length ? `<td class="r num" style="color:${q < l.qty ? "var(--s-sub)" : "inherit"}">${q}</td><td>${ls.map(s => `<span class="lot">${esc(s.lotNo)} × ${s.qty}</span>`).join("") || '<span class="faint">—</span>'}</td>` : ""}<td class="r num">${money(l.qty * l.unitPrice)}</td></tr>`; }).join("")}
+    </tbody></table></div>
+    <div class="totals num" style="padding:0 12px 10px"><div><span class="muted">Subtotal</span><span>${money(t.sub)}</span></div><div><span class="muted">GST</span><span>${money(t.gst)}</span></div><div class="grand"><span>Total</span><span>${money(t.total)}</span></div></div></div>
+    ${o.shipments.length ? `<p class="faint" style="font-size:13px;margin-top:8px">Shipment ${o.shipments.map(s => esc(s.qbtNo)).join(", ")} · from QBT, matched on item no.</p>` : ""}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px">
+      ${custView() && editable(o) && o.bc.status === "Open" ? `<button class="btn dark" data-edit="${esc(o.portalNo)}">Edit order</button>` : ""}
+      ${custView() && !editable(o) && st === "submitted" ? `<span class="rule">${ICON.shield}Released in BC. Edits are locked.</span>` : ""}
+      ${custView() && st === "invoiced" ? `<button class="btn primary" data-pay="${esc(o.portalNo)}">Pay now</button>` : ""}
+    </div>
+    ${admin ? simPanel(o) : ""}
+  </aside>`;
+}
+function simPanel(o) {
+  if (Store.state.settings.env !== "demo") return "";
+  const st = stage(o);
+  return `<section class="card" style="margin-top:20px;background:#fffbea"><h3 style="font-size:15px">BC sandbox simulator</h3><p class="faint" style="font-size:13px;margin:4px 0 10px">Stands in for what JSH staff do in Business Central, so you can test every stage. Demo only. In production these steps happen in BC and the portal reads them.</p>
+    <div class="sim">
+      <button class="btn sm" data-sim="release|${esc(o.portalNo)}" ${o.bc.status === "Released" ? "disabled" : ""}>Release</button>
+      <button class="btn sm" data-sim="reopen|${esc(o.portalNo)}" ${o.bc.status !== "Released" || o.shipments.length ? "disabled" : ""}>Reopen</button>
+      <button class="btn sm" data-sim="review|${esc(o.portalNo)}" ${o.bc.reviewed === "Reviewed" ? "disabled" : ""}>Set Order reviewed</button>
+      <button class="btn sm" data-sim="ship|${esc(o.portalNo)}" ${st !== "confirmed" ? "disabled" : ""}>Ship (create QBT)</button>
+      <button class="btn sm" data-sim="invoice|${esc(o.portalNo)}" ${st !== "shipped" ? "disabled" : ""}>Post invoice</button>
+      <button class="btn sm" data-sim="pay|${esc(o.portalNo)}" ${st !== "invoiced" ? "disabled" : ""}>Record payment</button>
+    </div></section>`;
+}
+function simulate(act, portalNo) {
+  const S = Store.state, o = S.orders.find(x => x.portalNo === portalNo); if (!o) return;
+  const c = customer(o.customerNo);
+  if (act === "release") { o.bc.status = "Released"; o.bc.releasedAt = iso(Date.now()); }
+  if (act === "reopen") { o.bc.status = "Open"; o.bc.reviewed = ""; }
+  if (act === "review") { o.bc.reviewed = "Reviewed"; o.bc.reviewedAt = iso(Date.now()); }
+  if (act === "ship") o.shipments.push(makeShipment(S, o, iso(Date.now())));
+  if (act === "invoice") o.invoice = makeInvoice(S, o, iso(Date.now()), c.terms);
+  if (act === "pay") { o.invoice.remaining = 0; o.invoice.paidAt = iso(Date.now()); }
+  log("sim", `Simulator: ${act} on ${o.bc.soNo} (${o.portalNo})`);
+  Store.save(); openOrder(portalNo); render(); toast(`${o.bc.soNo}: ${STAGE_LABEL[stage(o)]}`);
+}
+
+/* ============ admin pages ============ */
+function adminPage() {
+  switch (route.page) {
+    case "admin-orders": return adminOrders();
+    case "admin-customers": return adminCustomers();
+    case "admin-items": return adminItems();
+    case "admin-users": return adminUsers();
+    case "admin-settings": return adminSettings();
+    default: return adminOverview();
+  }
+}
+function adminOverview() {
+  const S = Store.state, os = S.orders;
+  const n = st => os.filter(o => stage(o) === st).length;
+  const ar = os.filter(o => stage(o) === "invoiced").reduce((a, o) => a + o.invoice.remaining, 0);
+  const month = os.filter(o => new Date(o.createdAt).getMonth() === new Date().getMonth() && new Date(o.createdAt).getFullYear() === new Date().getFullYear());
+  const recent = [...os].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8);
+  return `<div class="page-head"><div><h1>Portal overview</h1><p class="muted" style="margin:4px 0 0">${S.customers.filter(c => c.active).length} active customers · ${S.users.filter(u => u.role === "customer" && u.active).length} customer users · data: ${S.settings.env === "demo" ? "demo" : esc(S.settings.env)} (${Store.mode === "cloud" ? "saved to the artifact" : Store.mode === "local" ? "saved in this browser" : "this session only"})</p></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap"><select class="input" id="viewAsSel" style="width:auto" aria-label="Preview as customer"><option value="">Preview as customer…</option>${S.customers.map(c => `<option value="${esc(c.no)}">${esc(c.name)}</option>`).join("")}</select></div></div>
+  <div class="grid anim">
+    <section class="kpis">
+      <div class="kpi" style="background:var(--blush)"><span>Orders this month</span><b class="num" data-count="${month.length}">${month.length}</b></div>
+      <div class="kpi" style="background:var(--butter)"><span>Awaiting confirmation</span><b class="num" data-count="${n("submitted")}">${n("submitted")}</b></div>
+      <div class="kpi" style="background:var(--sky)"><span>Shipped, not invoiced</span><b class="num" data-count="${n("shipped")}">${n("shipped")}</b></div>
+      <div class="kpi" style="background:var(--mint)"><span>Outstanding invoices</span><b class="num" data-count="${ar}" data-fmt="money">${money(ar)}</b></div>
+    </section>
+    <div class="two">
+      <section class="card"><div class="page-head" style="margin-bottom:6px"><h2 style="font-size:19px">Latest orders</h2><button class="link" data-go="admin-orders">All orders →</button></div>${ordersTable(recent, false, true)}</section>
+      <section class="card"><h2 style="font-size:19px;margin-bottom:10px">Activity &amp; API calls</h2><div class="log">${S.log.slice(0, 40).map(l => `<div><span class="tag ${esc(l.type)}">${esc(l.type)}</span><span><span class="mono" style="font-size:12px">${esc(l.text)}</span><br><span class="faint" style="font-size:12px">${dtt(l.ts)} · ${esc(l.actor)}</span></span></div>`).join("") || '<div class="empty">No activity yet.</div>'}</div></section>
+    </div>
+  </div>`;
+}
+function adminOrders() {
+  const S = Store.state; const f = ui.adminFilter; const q = ui.search.trim().toLowerCase();
+  let list = S.orders.filter(o => (f === "all" || stage(o) === f) && (!q || [o.portalNo, o.bc.soNo, o.header.customerPO, o.invoice?.no, customer(o.customerNo)?.name].join(" ").toLowerCase().includes(q)));
+  list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return `<div class="page-head"><div><h1>All orders</h1><p class="muted" style="margin:4px 0 0">Open an order to see its lines, lots and the BC simulator.</p></div></div>
+  <div class="toolbar"><input class="input" id="admSearch" placeholder="Search order, SO, PO, invoice, customer" value="${esc(ui.search)}" aria-label="Search orders"><div class="switch">${["all", ...STAGES].map(s => `<button class="${f === s ? "on" : ""}" data-af="${s}">${s === "all" ? "All" : STAGE_LABEL[s]}</button>`).join("")}</div></div>
+  <section class="card">${ordersTable(list, true, true)}</section>`;
+}
+function adminCustomers() {
+  const S = Store.state;
+  return `<div class="page-head"><div><h1>Customers</h1><p class="muted" style="margin:4px 0 0">Read from BC (standard customers API). Customer Price Group decides which items each customer can see and order.</p></div></div>
+  <section class="card"><div class="tbl-wrap"><table><thead><tr><th>No.</th><th>Name</th><th>Price group</th><th>Contact</th><th>Ship to</th><th>Terms</th><th class="r">Portal users</th><th class="r">Orders</th><th>Portal access</th><th></th></tr></thead><tbody>
+  ${S.customers.map((c, i) => `<tr style="animation-delay:${i * .03}s"><td class="mono"><b>${esc(c.no)}</b></td><td>${esc(c.name)}</td><td><span class="pill st-confirmed">${esc(c.priceGroup)}</span></td><td>${esc(c.contact)}<br><span class="faint" style="font-size:12px">${esc(c.email)}</span></td><td style="max-width:240px">${esc(c.shipTo)}</td><td>${esc(c.terms)}</td><td class="r num">${S.users.filter(u => u.customerNo === c.no).length}</td><td class="r num">${S.orders.filter(o => o.customerNo === c.no).length}</td><td><button class="btn sm ${c.active ? "" : "danger"}" data-cact="${esc(c.no)}">${c.active ? "Enabled" : "Disabled"}</button></td><td><button class="link" data-viewas="${esc(c.no)}">Preview</button></td></tr>`).join("")}
+  </tbody></table></div></section>`;
+}
+function adminItems() {
+  const S = Store.state; const groups = [...new Set(S.priceLists.map(p => p.group))];
+  const pl = S.priceLists.filter(p => p.group === ui.itemGroup);
+  return `<div class="page-head"><div><h1>Items &amp; price lists</h1><p class="muted" style="margin:4px 0 0">Price lists come from your custom BC API and are filtered on Customer Price Group.</p></div>
+    <div class="switch">${groups.map(g => `<button class="${ui.itemGroup === g ? "on" : ""}" data-ig="${esc(g)}">${esc(g)}</button>`).join("")}</div></div>
+  <div class="two">
+    <section class="card"><h2 style="font-size:18px;margin-bottom:8px">Price list ${esc(ui.itemGroup)} <span class="faint" style="font-size:14px">(${pl.length} items)</span></h2><div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Description</th><th class="r">Unit price</th><th class="r">Min qty</th><th>From</th><th>Used by</th></tr></thead><tbody>
+      ${pl.map((p, i) => { const it = S.items.find(x => x.no === p.itemNo); return `<tr style="animation-delay:${i * .02}s"><td class="mono">${esc(p.itemNo)}</td><td>${esc(it?.desc)}</td><td class="r num">${money(p.unitPrice)}</td><td class="r num">${p.minQty}</td><td>${dt(p.startDate)}</td><td>${S.customers.filter(c => c.priceGroup === p.group).map(c => esc(c.no)).join(", ")}</td></tr>`; }).join("")}
+    </tbody></table></div></section>
+    <section class="card"><h2 style="font-size:18px;margin-bottom:8px">Item master</h2><div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Description</th><th>Category</th><th>Portal</th></tr></thead><tbody>
+      ${S.items.map((it, i) => `<tr style="animation-delay:${i * .02}s"><td class="mono">${esc(it.no)}</td><td>${esc(it.desc)}<br><span class="faint" style="font-size:12px">${esc(it.pack)} · ${esc(it.uom)}</span></td><td><span class="pill" style="background:${CAT_COL[it.cat]};color:var(--ink)">${esc(it.cat)}</span></td><td><button class="btn sm ${it.blocked ? "danger" : ""}" data-iblock="${esc(it.no)}">${it.blocked ? "Hidden" : "Visible"}</button></td></tr>`).join("")}
+    </tbody></table></div><p class="faint" style="font-size:12px;margin:10px 0 0">Hiding an item only hides it in the portal. Nothing is written to BC.</p></section>
+  </div>`;
+}
+function adminUsers() {
+  const S = Store.state;
+  return `<div class="page-head"><div><h1>Portal users</h1><p class="muted" style="margin:4px 0 0">For the trial, sign-ins are set up by hand. Customer self-invite comes later.</p></div><button class="btn primary" data-act="add-user">${ICON.plus.replace("<svg", '<svg width="16" height="16"')} Add user</button></div>
+  <section class="card"><div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Customer</th><th>Status</th><th></th></tr></thead><tbody>
+  ${S.users.map((u, i) => `<tr style="animation-delay:${i * .03}s"><td><b>${esc(u.name)}</b></td><td class="mono">${esc(u.username)}</td><td><span class="pill ${u.role === "admin" ? "st-confirmed" : "st-shipped"}">${esc(u.role)}</span></td><td>${esc(u.customerNo ? customer(u.customerNo)?.name || u.customerNo : "—")}</td><td>${u.active ? '<span class="pill st-paid">Active</span>' : '<span class="pill st-invoiced">Disabled</span>'}</td><td style="white-space:nowrap">${u.id === session.userId ? '<span class="faint">You</span>' : `<button class="btn sm ghost" data-ureset="${esc(u.id)}">Reset password</button> <button class="btn sm ${u.active ? "danger" : ""}" data-utog="${esc(u.id)}">${u.active ? "Disable" : "Enable"}</button>`}</td></tr>`).join("")}
+  </tbody></table></div>
+  <div class="rule" style="margin-top:14px">${ICON.shield}<span>Prototype sign-in only: passwords are stored as plain text so you can test. Production will use Microsoft Entra External ID (MFA, password reset, invites).</span></div></section>
+  <section class="card" style="margin-top:18px;opacity:.85"><h3 style="font-size:16px">Coming later: customer invites</h3><p class="muted" style="margin:6px 0 0">Customer admins invite their own staff from the portal, and invite emails are sent from BC.</p></section>`;
+}
+function adminSettings() {
+  const S = Store.state;
+  const apis = [
+    ["Customers", "Standard", "GET /api/v2.0/companies({id})/customers", "Customer master, Customer Price Group"],
+    ["Price list", "Custom", "GET …/customerPriceLists?$filter=customerPriceGroup eq '{grp}'", "Items + prices per group"],
+    ["Create order", "Custom", "POST …/portalSalesOrders (header + lines)", "Returns BC Sales Order No."],
+    ["Order status", "Custom", "GET …/portalSalesOrders?$filter=customerNo eq '{no}'", "Status (Open/Released) + Order reviewed"],
+    ["Edit order", "Custom", "PATCH …/portalSalesOrders({no})", "Only while Status = Open"],
+    ["Shipments", "Custom", "GET …/qbt?$filter=salesOrderNo eq '{so}'", "Item, lot no., qty shipped"],
+    ["Invoices", "Standard", "GET /api/v2.0/companies({id})/salesInvoices?$filter=customerNumber eq '{no}'", "orderNumber, remainingAmount, status"]
+  ];
+  return `<div class="page-head"><div><h1>Settings</h1><p class="muted" style="margin:4px 0 0">Data source, API mapping, data rules and reset.</p></div></div>
+  <div class="grid anim">
+    <section class="card"><h2 style="font-size:18px">Data source</h2><p class="muted" style="margin:4px 0 12px">The portal is running on demo data. Sandbox and Production unlock once the BC connector (Entra app registration + APIs) is in place.</p>
+      <div class="switch"><button class="on">Demo</button><button disabled title="Connector pending">BC Sandbox</button><button disabled title="Connector pending">BC Production</button></div></section>
+    <section class="card"><h2 style="font-size:18px;margin-bottom:8px">API mapping</h2><div class="tbl-wrap"><table><thead><tr><th>Use</th><th>Type</th><th>Call</th><th>Gives the portal</th><th>Status</th></tr></thead><tbody>
+      ${apis.map(a => `<tr style="animation:none"><td><b>${a[0]}</b></td><td><span class="pill ${a[1] === "Custom" ? "st-invoiced" : "st-shipped"}">${a[1]}</span></td><td class="mono" style="font-size:12px">${esc(a[2])}</td><td>${esc(a[3])}</td><td><span class="pill st-submitted">Awaiting API</span></td></tr>`).join("")}
+    </tbody></table></div></section>
+    <section class="card"><h2 style="font-size:18px">Data rules</h2><div class="grid" style="gap:10px;margin-top:10px">
+      <div class="rule">${ICON.shield}<span>A sales order is created only when a signed-in user presses Submit. No automation, agent or scheduled job creates orders.</span></div>
+      <div class="rule">${ICON.shield}<span>The portal never bulk-creates or overwrites BC data. Status sync is read-only (GET).</span></div>
+      <div class="rule">${ICON.shield}<span>Edits are allowed only while BC Status = Open. Once released, the order is locked in the portal.</span></div>
+      <div class="rule">${ICON.shield}<span>Customers only see and order items on their own price list (Customer Price Group). Every line is checked again on submit.</span></div></div></section>
+    <section class="card" style="border:1px solid #ffd0da"><h2 style="font-size:18px">Reset portal data</h2><p class="muted" style="margin:4px 0 12px">Affects portal data only. Nothing is deleted in Business Central.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn danger" data-act="reset-orders">Clear all orders</button><button class="btn danger" data-act="reset-all">Reset everything to demo data</button></div></section>
+  </div>`;
+}
+
+/* ============ modals, toasts, confetti ============ */
+function openModal(html, locked) { $("#layer").innerHTML = `<div class="scrim" ${locked ? "" : 'data-act="close-layer"'}></div><div class="modal" role="dialog" aria-modal="true">${html}</div>`; }
+function closeModal() { $("#layer").innerHTML = ""; }
+function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; $("#toasts").appendChild(t); setTimeout(() => t.remove(), 2600); }
+function confetti() {
+  if (reduced) return;
+  const cv = $("#confetti"), ctx = cv.getContext("2d"); cv.width = innerWidth; cv.height = innerHeight;
+  const cols = ["#e6407a", "#ff9f6e", "#7a5cff", "#1fae74", "#2d9cdb", "#ffd166"];
+  const ps = Array.from({ length: 160 }, () => ({ x: innerWidth / 2, y: innerHeight / 2.4, vx: (Math.random() - .5) * 16, vy: Math.random() * -14 - 4, r: Math.random() * 6 + 4, c: cols[rnd(cols.length)], a: Math.random() * 6, va: (Math.random() - .5) * .3 }));
+  let f = 0; const tick = () => { ctx.clearRect(0, 0, cv.width, cv.height); ps.forEach(p => { p.vy += .35; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.a += p.va; ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a); ctx.fillStyle = p.c; ctx.fillRect(-p.r / 2, -p.r / 4, p.r, p.r / 2); ctx.restore(); }); if (++f < 150) requestAnimationFrame(tick); else ctx.clearRect(0, 0, cv.width, cv.height); };
+  tick();
+}
+function payModal(portalNo) {
+  const o = Store.state.orders.find(x => x.portalNo === portalNo);
+  openModal(`<div style="text-align:center"><div style="font-size:46px">💳</div><h2 style="font-size:22px;margin-top:6px">Online payments are coming soon</h2>
+    <p class="muted" style="margin:8px 0 0">You'll be able to pay invoice <b class="mono">${esc(o.invoice.no)}</b> (${money(o.invoice.remaining)}) by card or direct debit right here.</p>
+    <p class="muted" style="margin:8px 0 0">For now, pay by your usual method and quote <b>${esc(o.invoice.no)}</b> as the reference.</p>
+    <button class="btn primary" style="margin-top:18px" data-act="close-layer">Got it</button></div>`);
+}
+function userModal() {
+  const S = Store.state;
+  openModal(`<h2 style="font-size:22px">Add portal user</h2><form id="uForm" class="grid" style="gap:12px;margin-top:14px">
+    <div class="field"><label for="un">Full name</label><input class="input" id="un" required maxlength="60"></div>
+    <div class="field"><label for="uu">Username</label><input class="input" id="uu" required maxlength="40" pattern="[A-Za-z0-9._\\-]+"></div>
+    <div class="field"><label for="ur">Role</label><select class="input" id="ur"><option value="customer">Customer</option><option value="admin">Admin</option></select></div>
+    <div class="field"><label for="uc">Customer</label><select class="input" id="uc">${S.customers.map(c => `<option value="${esc(c.no)}">${esc(c.no)} · ${esc(c.name)}</option>`).join("")}</select></div>
+    <div class="err" id="uerr"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" data-act="close-layer">Cancel</button><button class="btn primary" type="submit">Create user</button></div></form>`);
+  $("#uForm").addEventListener("submit", e => {
+    e.preventDefault(); const un = $("#uu").value.trim();
+    if (S.users.some(u => u.username.toLowerCase() === un.toLowerCase())) { $("#uerr").textContent = "That username is taken. Choose another."; return; }
+    const pw = genPw(); const role = $("#ur").value;
+    S.users.push({ id: "u-" + Date.now().toString(36), username: un, password: pw, name: $("#un").value.trim(), role, customerNo: role === "customer" ? $("#uc").value : "", active: true });
+    log("admin", `User ${un} created`); Store.save(); render();
+    openModal(`<h2 style="font-size:22px">User created</h2><p class="muted">Share these sign-in details with the user.</p><div class="kv" style="grid-template-columns:1fr 1fr;margin-top:12px"><div><span>Username</span><b class="mono">${esc(un)}</b></div><div><span>Temporary password</span><b class="mono">${esc(pw)}</b></div></div><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-act="close-layer">Done</button></div>`);
+  });
+}
+const genPw = () => "Jsh@" + Math.random().toString(36).slice(2, 6) + (1000 + rnd(9000));
+function resetModal(kind) {
+  openModal(`<h2 style="font-size:22px">${kind === "all" ? "Reset everything to demo data?" : "Clear all orders?"}</h2>
+    <p class="muted" style="margin:8px 0 0">${kind === "all" ? "Users, customers, items, price lists and orders go back to the demo set. Passwords return to the prototype defaults." : "Every portal order, shipment and invoice record is removed. Customers, items, price lists and users stay."} This only affects portal data. Nothing changes in Business Central.</p>
+    <div class="field" style="margin-top:14px"><label for="rc">Type RESET to confirm</label><input class="input" id="rc" autocomplete="off"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button class="btn ghost" data-act="close-layer">Cancel</button><button class="btn danger" id="rgo" disabled>${kind === "all" ? "Reset to demo" : "Clear orders"}</button></div>`);
+  $("#rc").addEventListener("input", e => { $("#rgo").disabled = e.target.value !== "RESET"; });
+  $("#rgo").addEventListener("click", async () => {
+    const S = Store.state;
+    if (kind === "all") { const keep = session.userId; Store.state = demoState(); if (!Store.state.users.find(u => u.id === keep)) session.userId = "u-admin"; }
+    else { S.orders = []; log("admin", "All portal orders cleared (number series kept so portal nos. stay unique)"); }
+    draft = null; await Store.save(); closeModal(); render(); toast(kind === "all" ? "Demo data restored" : "Orders cleared. Fresh start.");
+  });
+}
+
+/* ============ events ============ */
+document.addEventListener("click", e => {
+  const t = e.target.closest("button, tr[data-open], [data-act]"); if (!t) return;
+  const d = t.dataset; const S = Store.state;
+  if (d.go) { if (d.go === "create") { startDraft(); return; } closeModal(); go(d.go); return; }
+  if (d.open) { openOrder(d.open); return; }
+  if (d.add) { addLine(d.add); return; }
+  if (d.rm) { draft.lines = draft.lines.filter(l => l.itemNo !== d.rm); refreshLines(); return; }
+  if (d.q) { const [it, dlt] = d.q.split("|"); const l = draft.lines.find(x => x.itemNo === it); const step = Number(dlt); l.qty = Math.max(1, l.qty + step); refreshLines(); return; }
+  if (d.cat) { ui.catCat = d.cat; document.querySelectorAll("[data-cat]").forEach(b => b.classList.toggle("on", b.dataset.cat === d.cat)); $("#catList").innerHTML = catList(BC.getPriceList(customer(draft.customerNo).priceGroup)); S.log.shift(); return; }
+  if (d.conf) { ui.confFilter = d.conf; render(); return; }
+  if (d.af) { ui.adminFilter = d.af; render(); return; }
+  if (d.ig) { ui.itemGroup = d.ig; render(); return; }
+  if (d.pay) { payModal(d.pay); return; }
+  if (d.edit) { const o = S.orders.find(x => x.portalNo === d.edit); closeModal(); if (o && editable(o)) startDraft(o); else toast("This order is locked."); return; }
+  if (d.sim) { const [a, p] = d.sim.split("|"); simulate(a, p); return; }
+  if (d.viewas) { session.viewAs = d.viewas; saveSession(); go("home"); return; }
+  if (d.cact) { const c = customer(d.cact); c.active = !c.active; log("admin", `Portal access ${c.active ? "enabled" : "disabled"} for ${c.no}`); Store.save(); render(); return; }
+  if (d.iblock) { const it = S.items.find(x => x.no === d.iblock); it.blocked = !it.blocked; log("admin", `${it.no} ${it.blocked ? "hidden" : "shown"} in portal`); Store.save(); render(); return; }
+  if (d.utog) { const u = S.users.find(x => x.id === d.utog); u.active = !u.active; log("admin", `User ${u.username} ${u.active ? "enabled" : "disabled"}`); Store.save(); render(); return; }
+  if (d.ureset) { const u = S.users.find(x => x.id === d.ureset); u.password = genPw(); log("admin", `Password reset for ${u.username}`); Store.save(); openModal(`<h2 style="font-size:22px">Password reset</h2><div class="kv" style="grid-template-columns:1fr 1fr;margin-top:12px"><div><span>Username</span><b class="mono">${esc(u.username)}</b></div><div><span>New password</span><b class="mono">${esc(u.password)}</b></div></div><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-act="close-layer">Done</button></div>`); return; }
+  switch (d.act) {
+    case "logout": log("auth", `${me().name} signed out`); Store.save(); session = null; saveSession(); draft = null; closeModal(); render(); break;
+    case "exit-viewas": session.viewAs = ""; saveSession(); draft = null; go("admin-overview"); break;
+    case "close-layer": closeModal(); break;
+    case "close-go": closeModal(); go(d.to); break;
+    case "close-new": closeModal(); startDraft(); break;
+    case "cancel-draft": draft = null; go(route.sub || "home"); break;
+    case "submit-order": submitOrder(); break;
+    case "sync": { const b = t; b.disabled = true; b.querySelector("svg").animate([{ transform: "rotate(0)" }, { transform: "rotate(360deg)" }], { duration: 700, iterations: 2 }); BC.refresh(activeCustomerNo()); Store.save(); setTimeout(() => { render(); toast("Status refreshed from Business Central"); }, reduced ? 0 : 900); break; }
+    case "add-user": userModal(); break;
+    case "reset-orders": resetModal("orders"); break;
+    case "reset-all": resetModal("all"); break;
+  }
+});
+document.addEventListener("input", e => { if (e.target.id === "admSearch") { ui.search = e.target.value; clearTimeout(window.__s); window.__s = setTimeout(() => { render(); const el = $("#admSearch"); el.focus(); el.setSelectionRange(el.value.length, el.value.length); }, 250); } });
+document.addEventListener("change", e => { if (e.target.id === "viewAsSel" && e.target.value) { session.viewAs = e.target.value; saveSession(); go("home"); } });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#layer").innerHTML && !$(".steps")) closeModal(); });
+
+
+/* ============ boot ============ */
+(async () => { await Store.init(); const h = location.hash.slice(1); if (h && me()) route.page = h === "create" ? "home" : h; render(); })();
+})();
+</script>
+</body>
+</html>
