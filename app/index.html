@@ -310,7 +310,7 @@ function demoState() {
     { id: "u-admin", username: "admin", password: "Portal@Admin1", name: "Portal Admin", role: "admin", customerNo: "", active: true },
     { id: "u-wpg", username: "wpg.buyer", password: "Portal@Trial1", name: "Priya Shah", role: "customer", customerNo: "C10010", active: true }
   ];
-  const s = { version: 1, settings: { env: "demo", next: { portal: 101, so: 104230, inv: 208810, qbt: 55010 }, lastSync: daysAgo(0.02) }, items, priceLists, customers, users, orders: [], log: [] };
+  const s = { version: 1, settings: { env: "demo", next: { portal: 1, so: 104230, inv: 208810, qbt: 55010 }, lastSync: daysAgo(0.02) }, items, priceLists, customers, users, orders: [], log: [] };
   const price = (g, no) => priceLists.find(p => p.group === g && p.itemNo === no).unitPrice;
   const mk = (cust, stage, ago, lines, extra = {}) => {
     const c = customers.find(x => x.no === cust);
@@ -346,7 +346,7 @@ function demoState() {
   return s;
 }
 function newOrderShell(s, c, user) {
-  const portalNo = Live.on ? newPortalNo() : "WEB-" + pad(s.settings.next.portal++, 6);
+  const portalNo = Live.on ? newPortalNo() : "JSH" + pad(s.settings.next.portal++, 4);
   return {
     portalNo, customerNo: c.no, createdBy: user ? user.name : "", createdAt: iso(Date.now()),
     header: { orderDate: today(), requestedDeliveryDate: addDays(Date.now(), 7).slice(0, 10), customerPO: "", contact: c.contact, email: c.email, phone: c.phone, shipTo: c.shipTo, billTo: c.billTo, terms: c.terms, location: c.location, priceGroup: c.priceGroup, notes: "" },
@@ -457,7 +457,7 @@ const Live = {
     S.customers = cs.value.map(c => ({ no: c.number, name: c.displayName, priceGroup: "LIST", contact: c.displayName, email: c.email || "", phone: c.phoneNumber || "", billTo: addr(c), shipTo: addr(c), terms: "Per BC", location: "", active: !c.blocked || !String(c.blocked).trim() }));
     S.items = its.value.map(i => ({ no: i.number, desc: i.displayName, cat: i.itemCategoryCode || "Other", pack: i.baseUnitOfMeasureCode || "", uom: i.baseUnitOfMeasureCode || "", caseQty: 1, blocked: false, inventory: i.inventory }));
     S.priceLists = S.items.map(i => ({ group: "LIST", itemNo: i.no, unitPrice: (its.value.find(x => x.number === i.no) || {}).unitPrice || 0, minQty: 1, startDate: "" }));
-    const split = ext => { const m = /^(WEB-[0-9A-Za-z-]+)(?:\/(.*))?$/.exec(ext || ""); return m ? { portalNo: m[1], po: m[2] || "" } : { portalNo: "", po: ext || "" }; };
+    const split = ext => { const m = /^(JSH\d{4,}|WEB-[0-9A-Za-z-]+)(?:\/(.*))?$/.exec(ext || ""); return m ? { portalNo: m[1], po: m[2] || "" } : { portalNo: "", po: ext || "" }; };
     const orders = os.value.map(o => {
       const x = split(o.externalDocumentNumber);
       const lines = (o.lines || []).filter(l => l.lineType === "Item").map(l => ({ lineNo: l.sequence, itemNo: l.lineObjectNumber, desc: l.description, uom: l.unitOfMeasureCode, qty: l.quantity, unitPrice: l.unitPrice }));
@@ -486,7 +486,8 @@ const Live = {
   }
 };
 const pno = o => o.notPortal ? "—" : o.portalNo;
-function newPortalNo() { const d = new Date().toISOString().slice(2, 10).replace(/-/g, ""); const b = new Uint8Array(3); crypto.getRandomValues(b); return `WEB-${d}-${[...b].map(x => x.toString(16).padStart(2, "0")).join("").toUpperCase().slice(0, 5)}`; }
+function newPortalNo() { return "JSH…"; }
+function newDraftId() { const b = new Uint8Array(12); crypto.getRandomValues(b); return [...b].map(x => x.toString(16).padStart(2, "0")).join(""); }
 async function liveSignedIn() {
   $("#app").innerHTML = `<div style="display:grid;place-items:center;min-height:100vh;text-align:center"><div><div class="logo" style="width:64px;height:64px;font-size:18px;margin:0 auto 14px"><span>JSH</span></div><div class="muted" style="font-weight:700">Loading from Business Central…</div></div></div>`;
   try { await Live.load(); }
@@ -506,9 +507,9 @@ const BC = {
   },
   async postSalesOrder(order) { // CUSTOM API POST .../portalSalesOrders (header + lines deep insert) → returns BC "No."
     if (Live.on) {
-      const r = await Live.api("POST", "/orders", { portalOrderNo: order.portalNo, header: { customerPO: order.header.customerPO, requestedDeliveryDate: order.header.requestedDeliveryDate }, lines: order.lines.map(l => ({ itemNo: l.itemNo, quantity: l.qty })) });
-      log("post", `POST salesOrders ${order.portalNo} → ${r.number}${r.duplicate ? " (already existed)" : ""}`);
-      return { number: r.number, status: r.status || "Open", orderReviewed: "" };
+      const r = await Live.api("POST", "/orders", { draftId: order.draftId, header: { customerPO: order.header.customerPO, requestedDeliveryDate: order.header.requestedDeliveryDate }, lines: order.lines.map(l => ({ itemNo: l.itemNo, quantity: l.qty })) });
+      log("post", `POST salesOrders ${r.portalOrderNo} → ${r.number}${r.duplicate ? " (already existed)" : ""}`);
+      return { number: r.number, status: r.status || "Open", orderReviewed: "", portalNo: r.portalOrderNo };
     }
     await wait(450);
     const S = Store.state; const soNo = "SO-" + S.settings.next.so++;
@@ -715,16 +716,17 @@ function invoiceView(st) {
 function startDraft(existing) {
   const S = Store.state; const c = customer(activeCustomerNo());
   if (existing) { draft = clone(existing); draft._editing = true; }
-  else { draft = newOrderShell(S, c, me()); draft._editing = false; Store.save(); }
+  else { draft = newOrderShell(S, c, me()); draft._editing = false; draft.draftId = newDraftId(); Store.save(); }
   go("create");
+  if (Live.on && !existing) { const d = draft; Live.api("GET", "/orders/next-number").then(r => { if (draft === d) { d.portalNo = r.next; d._preview = true; const el = $("#pno"); if (el) el.textContent = r.next; } }).catch(() => {}); }
 }
 function createView() {
-  if (!draft) { const S = Store.state; draft = newOrderShell(S, customer(activeCustomerNo()), me()); Store.save(); }
+  if (!draft) { const S = Store.state; draft = newOrderShell(S, customer(activeCustomerNo()), me()); draft.draftId = newDraftId(); Store.save(); }
   const c = customer(draft.customerNo); const pl = BC.getPriceList(c.priceGroup);
   const cats = ["All", ...new Set(pl.map(p => p.item.cat))];
   const h = draft.header;
   return `<div class="page-head"><div><button class="crumb" data-act="cancel-draft">← ${draft._editing ? "Cancel edit" : "Home"}</button><h1>${draft._editing ? "Edit order" : "Create Order"}</h1></div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="faint" style="font-size:13px;font-weight:700">Portal order no.</span><span class="order-no">${esc(draft.portalNo)}</span>${draft._editing ? `<span class="order-no" style="background:var(--violet)">${esc(draft.bc.soNo)}</span>` : ""}</div></div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="faint" style="font-size:13px;font-weight:700">Portal order no.</span><span class="order-no" id="pno">${esc(draft.portalNo)}</span>${Live.on ? '<span class="faint" style="font-size:12px">confirmed when you submit</span>' : ""}${draft._editing ? `<span class="order-no" style="background:var(--violet)">${esc(draft.bc.soNo)}</span>` : ""}</div></div>
   <div class="co">
     <div class="grid">
       <section class="card"><h3 style="font-size:17px;margin-bottom:14px">Order details</h3>
@@ -804,6 +806,7 @@ async function submitOrder() {
     try { res = await BC.postSalesOrder(draft); }
     catch (e) { openModal(`<h2 style="font-size:22px">Order not created</h2><p class="muted" style="margin:8px 0 0">${esc(e.message)}</p><p class="faint" style="font-size:13px">Nothing was created in Business Central. Your order is still here: fix the issue and submit again.</p><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-act="close-layer">Back to my order</button></div>`); return; }
     await run("s3", 300);
+    if (res.portalNo) draft.portalNo = res.portalNo;
     const o = clone(draft); delete o._editing; o.createdAt = iso(Date.now()); o.createdBy = me().name;
     o.bc = { soNo: res.number, status: res.status, reviewed: res.orderReviewed, submittedAt: iso(Date.now()), releasedAt: "", reviewedAt: "" };
     Store.state.orders.push(o); draft.bc.soNo = res.number;

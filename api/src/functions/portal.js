@@ -87,14 +87,24 @@ app.http("orders-list", {
   })
 });
 
-// ---------- Portal order number ----------
-// Unique and readable: WEB-YYMMDD-XXXX. Replaced by a BC number series once the custom API exists.
+// ---------- Portal order number: JSH0001, JSH0002, ... ----------
+// Next number = highest JSHnnnn found in External Document No. on open orders and posted invoices, plus one.
+// Assigned on the server at the moment of Submit, so two users can't both take the same number.
+const PORTAL_RE = /^JSH(\d{4,})(?:\/|$)/;
+async function highestPortalNo() {
+  const f = "$filter=startswith(externalDocumentNumber,'JSH')&$select=externalDocumentNumber&$top=1000";
+  const [o, i] = await Promise.all([bc("GET", `/salesOrders?${f}`), bc("GET", `/salesInvoices?${f}`)]);
+  let max = 0;
+  for (const r of [...o.value, ...i.value]) { const m = PORTAL_RE.exec(r.externalDocumentNumber || ""); if (m) max = Math.max(max, parseInt(m[1], 10)); }
+  return max;
+}
+const fmtPortalNo = n => "JSH" + String(n).padStart(4, "0");
+let numberLock = Promise.resolve();
+const recentSubmits = new Map(); // draftId -> result, guards against double Submit
+
 app.http("order-number", {
-  route: "orders/new-number", methods: ["POST"], authLevel: "anonymous",
-  handler: handler(async () => {
-    const d = new Date().toISOString().slice(2, 10).replace(/-/g, "");
-    return json(200, { portalOrderNo: `WEB-${d}-${crypto.randomBytes(3).toString("hex").toUpperCase().slice(0, 5)}` });
-  })
+  route: "orders/next-number", methods: ["GET"], authLevel: "anonymous",
+  handler: handler(async () => json(200, { next: fmtPortalNo((await highestPortalNo()) + 1) }))
 });
 
 // ---------- Create sales order: the ONLY write. Runs only on a signed-in user's Submit. ----------
@@ -106,21 +116,16 @@ app.http("orders-create", {
     const b = await request.json().catch(() => null);
     const customerNo = user.role === "customer" ? user.customerNo : (b && b.customerNo);
     if (!b || !customerNo) return json(400, { error: "Missing order details." });
-    const portalNo = String(b.portalOrderNo || "");
-    if (!/^WEB-\d{6}-[0-9A-F]{5}$/.test(portalNo)) return json(400, { error: "Invalid portal order number." });
+    const draftId = String(b.draftId || "").slice(0, 40);
+    if (draftId && recentSubmits.has(draftId)) return json(200, { duplicate: true, ...recentSubmits.get(draftId) });
     const lines = Array.isArray(b.lines) ? b.lines : [];
     if (!lines.length || lines.length > 200) return json(400, { error: "An order needs between 1 and 200 lines." });
     for (const l of lines) {
       if (!/^[A-Za-z0-9._\-\/ ]{1,20}$/.test(String(l.itemNo || ""))) return json(400, { error: `Invalid item number: ${l.itemNo}` });
       const q = Number(l.quantity); if (!(q > 0 && q <= 100000 && Number.isFinite(q))) return json(400, { error: `Invalid quantity for ${l.itemNo}` });
     }
-    // Interim link: portal no. (and customer PO) in External Document No. Moves to a custom field with the custom API.
-    const po = String((b.header && b.header.customerPO) || "").replace(/[^\w\-\/ .]/g, "").slice(0, 20);
-    const extDoc = (po ? `${portalNo}/${po}` : portalNo).slice(0, 35);
-
-    // Double-submit guard: if this portal order is already in BC, return it instead of creating another.
-    const existing = await bc("GET", `/salesOrders?$filter=customerNumber eq ${lit(customerNo)} and startswith(externalDocumentNumber,${lit(portalNo)})&$select=number,externalDocumentNumber,status`);
-    if (existing.value.length) return json(200, { duplicate: true, number: existing.value[0].number, portalOrderNo: portalNo });
+    // Interim: the customer PO rides along in External Document No. until "Your Reference" is available through the custom API.
+    const po = String((b.header && b.header.customerPO) || "").replace(/[^\w\-\/ .]/g, "").slice(0, 25);
 
     // Every item must exist and not be blocked. (The custom price-list check slots in here.)
     const nos = [...new Set(lines.map(l => String(l.itemNo)))];
@@ -130,7 +135,11 @@ app.http("orders-create", {
     if (bad.length) return json(400, { error: `These items can't be ordered: ${bad.join(", ")}` });
 
     const h = b.header || {};
-    const body = {
+    // Take the next number and create the order inside one lock, so numbers never collide on this instance.
+    const run = numberLock.then(async () => {
+      const portalNo = fmtPortalNo((await highestPortalNo()) + 1);
+      const extDoc = (po ? `${portalNo}/${po}` : portalNo).slice(0, 35);
+      const body = {
       customerNumber: customerNo,
       externalDocumentNumber: extDoc,
       orderDate: new Date().toISOString().slice(0, 10),
@@ -138,9 +147,15 @@ app.http("orders-create", {
       // Prices come from BC, never from the browser.
       salesOrderLines: lines.map(l => ({ lineType: "Item", lineObjectNumber: String(l.itemNo), quantity: Number(l.quantity) }))
     };
-    const created = await bc("POST", "/salesOrders", body);
+      const created = await bc("POST", "/salesOrders", body);
+      return { created, portalNo };
+    });
+    numberLock = run.catch(() => {});
+    const { created, portalNo } = await run;
     ctx.log(`Order ${created.number} created by ${user.username} for ${customerNo} (portal ${portalNo})`);
-    return json(201, { number: created.number, id: created.id, portalOrderNo: portalNo, status: created.status === "Draft" ? "Open" : created.status, totalAmountIncludingTax: created.totalAmountIncludingTax });
+    const result = { number: created.number, id: created.id, portalOrderNo: portalNo, status: created.status === "Draft" ? "Open" : created.status, totalAmountIncludingTax: created.totalAmountIncludingTax };
+    if (draftId) { recentSubmits.set(draftId, result); setTimeout(() => recentSubmits.delete(draftId), 15 * 60e3); }
+    return json(201, result);
   })
 });
 
