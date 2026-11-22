@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BC Connection Check</title>
+<style>
+  :root{--ink:#1d1a2b;--muted:#5b5670;--line:#ece7f5;--bg:#fbf9ff;--accent:#e6407a;--ok:#127a50;--bad:#c2264f}
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);padding:24px}
+  .wrap{max-width:900px;margin:0 auto;display:grid;gap:16px}
+  h1{margin:0;font-size:24px} .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px}
+  label{display:block;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin:0 0 6px}
+  input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit}
+  .row{display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end}
+  button{border:0;border-radius:999px;padding:10px 18px;font-weight:700;background:var(--accent);color:#fff;cursor:pointer}
+  button.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  table{width:100%;border-collapse:collapse} th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:13px} .ok{color:var(--ok);font-weight:700} .bad{color:var(--bad);font-weight:700}
+  .err{color:var(--bad);font-weight:600;min-height:20px} pre{white-space:pre-wrap;word-break:break-word;font-size:12px;background:#f6f3fb;padding:12px;border-radius:10px;max-height:360px;overflow:auto}
+  @media(max-width:640px){.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Business Central connection check</h1>
+  <div class="card">
+    <form id="f" class="row">
+      <div><label for="u">Admin username</label><input id="u" autocomplete="username" value="admin"></div>
+      <div><label for="p">Password</label><input id="p" type="password" autocomplete="current-password"></div>
+      <button type="submit">Sign in and check</button>
+    </form>
+    <div class="err" id="err" role="alert"></div>
+  </div>
+  <div id="out"></div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function check(token) {
+  $("#out").innerHTML = '<div class="card">Checking…</div>';
+  const r = await fetch("/api/health", { headers: token ? { "x-portal-token": token } : {} });
+  const h = await r.json();
+  const checks = Object.entries(h.checks || {}).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="${String(v).startsWith("ok") ? "ok" : "bad"}">${esc(v)}</td></tr>`).join("");
+  const comps = (h.companies || []).map(c => `<tr><td>${esc(c.name)}</td><td>${esc(c.displayName)}</td><td><code>${esc(c.id)}</code></td><td><button class="ghost" data-copy="${esc(c.id)}">Copy ID</button></td></tr>`).join("");
+  $("#out").innerHTML = `
+    <div class="card"><h2 style="margin:0 0 8px;font-size:18px">Checks</h2><table>${checks}</table></div>
+    ${comps ? `<div class="card"><h2 style="margin:0 0 8px;font-size:18px">Companies in ${esc(h.settings.BC_ENVIRONMENT)}</h2><p style="color:var(--muted);margin:0 0 8px">Copy the ID of the company the portal should use into the BC_COMPANY_ID setting in Azure.</p><table><tr><th>Name</th><th>Display name</th><th>Company ID</th><th></th></tr>${comps}</table></div>` : ""}
+    ${h.samples ? `<div class="card"><h2 style="margin:0 0 8px;font-size:18px">Sample data</h2><pre>${esc(JSON.stringify(h.samples, null, 2))}</pre></div>` : ""}`;
+}
+$("#f").addEventListener("submit", async e => {
+  e.preventDefault(); $("#err").textContent = "";
+  const r = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: $("#u").value, password: $("#p").value }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { $("#err").textContent = j.error || "Sign-in failed."; return; }
+  if (j.user.role !== "admin") { $("#err").textContent = "This page needs an admin sign-in."; return; }
+  $("#p").value = ""; check(j.token);
+});
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-copy]"); if (!b) return;
+  try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied"; } catch { b.textContent = "Select and copy"; }
+});
+</script>
+</body>
+</html>
