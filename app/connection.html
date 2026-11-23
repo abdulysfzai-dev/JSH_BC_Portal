@@ -42,8 +42,11 @@ async function check(token) {
   const h = await r.json();
   const checks = Object.entries(h.checks || {}).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="${String(v).startsWith("ok") ? "ok" : "bad"}">${esc(v)}</td></tr>`).join("");
   const comps = (h.companies || []).map(c => `<tr><td>${esc(c.name)}</td><td>${esc(c.displayName)}</td><td><code>${esc(c.id)}</code></td><td><button class="ghost" data-copy="${esc(c.id)}">Copy ID</button></td></tr>`).join("");
+  const fmt = v => v === true ? '<span class="ok">set</span>' : v === false || v === 0 ? '<span class="bad">not set</span>' : esc(v);
+  const settings = Object.entries(h.settings || {}).map(([k, v]) => `<tr><td><code>${esc(k)}</code></td><td>${fmt(v)}</td></tr>`).join("");
   $("#out").innerHTML = `
     <div class="card"><h2 style="margin:0 0 8px;font-size:18px">Checks</h2><table>${checks}</table></div>
+    <div class="card"><h2 style="margin:0 0 8px;font-size:18px">Settings</h2><p style="color:var(--muted);margin:0 0 8px">Secrets only show as set or not set.</p><table>${settings}</table></div>
     ${comps ? `<div class="card"><h2 style="margin:0 0 8px;font-size:18px">Companies in ${esc(h.settings.BC_ENVIRONMENT)}</h2><p style="color:var(--muted);margin:0 0 8px">Copy the ID of the company the portal should use into the BC_COMPANY_ID setting in Azure.</p><table><tr><th>Name</th><th>Display name</th><th>Company ID</th><th></th></tr>${comps}</table></div>` : ""}
     ${h.samples ? `<div class="card"><h2 style="margin:0 0 8px;font-size:18px">Sample data</h2><pre>${esc(JSON.stringify(h.samples, null, 2))}</pre></div>` : ""}`;
 }
