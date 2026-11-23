@@ -26,6 +26,11 @@ The portal only **reads** from BC. The single allowed write is `POST salesOrders
 | `SESSION_SECRET` | Any random string of 40+ characters (generate one in your password manager) |
 | `PORTAL_USERS` | The JSON list of portal sign-ins (supplied separately) |
 | `ALLOW_ORDER_CREATE` | `false` until we're ready to test order creation in the sandbox |
+| `STORAGE_CONNECTION` | Storage account connection string (portal users, invite/reset links, order log) |
+| `MAIL_SENDER` | No-reply mailbox the portal sends from, e.g. `noreply@jshealthvitamins.com` |
+| `NOTIFY_STAFF` | JSH staff emails copied on order notifications, comma-separated |
+| `BC_PORTAL_KEY` | Shared key (40+ random characters) BC uses to call the invite API |
+| `PORTAL_URL` | Optional. The portal's public address, used in email links |
 
 3. Save. The site restarts with the new settings.
 4. Open `https://<your-site>/api/health`. Every check should say `ok`. Sign in to the portal as admin, then reload `/api/health` to see company names and IDs. Copy the right ID into `BC_COMPANY_ID` and save.
@@ -42,6 +47,10 @@ The portal only **reads** from BC. The single allowed write is `POST salesOrders
 | `POST /api/orders` | Create sales order (Submit only, duplicate-safe, prices from BC) | standard `salesOrders` POST |
 | `GET /api/invoices` | Posted invoices with balance | standard `salesInvoices` |
 | `GET /api/shipments` | QBT lots | custom API (pending) |
+| `GET /api/invoices/{id}/pdf` | Invoice PDF rendered by BC | standard `pdfDocument` |
+| `POST /api/invites` | Invite / re-invite (portal admin, or BC with `x-bc-key`) | customers (check) |
+| `GET /api/auth/link` · `POST /api/auth/accept` · `POST /api/auth/forgot` · `POST /api/auth/reset` | Invite acceptance and password reset | none |
+| `GET /api/users` · `POST /api/users/status` | User admin | none |
 
 Note: in the standard API, sales order status `Draft` = BC **Open** and `Open` = BC **Released**. The back end translates this.
 

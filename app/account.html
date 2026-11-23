@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>JSH Trade Portal account</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@700;800&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#1d1a2b;--ink-2:#5b5670;--ink-3:#8f8aa3;--bg:#fbf9ff;--line:#ece7f5;--accent:#e6407a;--accent-2:#ff9f6e;--violet:#7a5cff;--bad:#c2264f;--ok:#1fae74;
+    --display:"Sora",system-ui,sans-serif;--body:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif}
+  *{box-sizing:border-box} html,body{margin:0;min-height:100%}
+  body{font-family:var(--body);color:var(--ink);background:var(--bg);display:grid;place-items:center;padding:24px;min-height:100vh;
+    background-image:radial-gradient(500px 400px at 10% 0%,#ffd3df 0,transparent 70%),radial-gradient(500px 400px at 100% 30%,#e3dbff 0,transparent 70%),radial-gradient(500px 400px at 40% 110%,#ffe0c7 0,transparent 70%)}
+  .card{background:rgba(255,255,255,.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid #fff;border-radius:26px;padding:32px;width:min(460px,100%);box-shadow:0 10px 30px -12px rgba(73,40,120,.2)}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+  .logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:#fff;font:800 13px var(--display);background:conic-gradient(from 200deg,var(--accent),var(--accent-2),var(--violet),var(--accent))}
+  h1{font:800 24px/1.2 var(--display);margin:0 0 6px;letter-spacing:-.02em} p{color:var(--ink-2);margin:0 0 16px;line-height:1.5}
+  form{display:grid;gap:14px} label{display:block;font-size:12px;font-weight:700;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+  input{width:100%;border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 12px;font:inherit;color:inherit}
+  input:focus{outline:none;border-color:var(--violet);box-shadow:0 0 0 4px rgba(122,92,255,.15)} input[readonly]{background:#f6f3fb;color:var(--ink-2)}
+  button{border:0;border-radius:999px;padding:13px;font:700 15px var(--body);color:#fff;background:linear-gradient(120deg,var(--accent),var(--accent-2));cursor:pointer}
+  button[disabled]{opacity:.5;cursor:wait}
+  .hint{font-size:12px;color:var(--ink-3);margin-top:6px} .err{color:var(--bad);font-weight:600;min-height:20px;font-size:14px}
+  a{color:var(--violet);font-weight:700}
+  .meter{height:6px;border-radius:6px;background:var(--line);margin-top:8px;overflow:hidden} .meter i{display:block;height:100%;width:0;background:var(--bad);transition:width .2s,background .2s}
+</style>
+</head>
+<body>
+<main class="card" id="card">
+  <div class="brand"><div class="logo">JSH</div><b style="font-family:var(--display)">Trade Portal</b></div>
+  <p>Checking your link…</p>
+</main>
+<script>
+(() => {
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const q = new URLSearchParams(location.search);
+const kind = q.get("reset") ? "reset" : q.get("invite") ? "invite" : "";
+const token = q.get("reset") || q.get("invite") || "";
+// Take the token out of the address bar right away, so it isn't left in history or shared by accident.
+try { history.replaceState(null, "", location.pathname); } catch (e) {}
+const brand = `<div class="brand"><div class="logo">JSH</div><b style="font-family:var(--display)">Trade Portal</b></div>`;
+const show = html => { $("#card").innerHTML = brand + html; };
+const fail = msg => show(`<h1>Link not valid</h1><p>${esc(msg)}</p><p><a href="/">Go to sign-in</a></p>`);
+
+function strength(p) { let s = 0; if (p.length >= 10) s++; if (p.length >= 14) s++; if (/[A-Za-z]/.test(p) && /\d/.test(p)) s++; if (/[^A-Za-z0-9]/.test(p)) s++; return s; }
+function bindMeter() {
+  const pw = $("#pw"), bar = $("#meter i");
+  pw.addEventListener("input", () => { const s = strength(pw.value); bar.style.width = (s * 25) + "%"; bar.style.background = s >= 3 ? "var(--ok)" : s === 2 ? "#f4a72b" : "var(--bad)"; });
+}
+async function post(path, body) {
+  const r = await fetch("/api" + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Something went wrong. Try again."); return j;
+}
+function signedIn(s) {
+  try { sessionStorage.setItem("jsh-portal-session", JSON.stringify({ userId: "live", token: s.token, viewAs: "" })); } catch (e) {}
+  show(`<h1>You're all set</h1><p>Taking you to the portal…</p>`);
+  setTimeout(() => { location.href = "/"; }, 900);
+}
+
+(async () => {
+  if (!kind) return fail("This page needs the link from your email.");
+  let info;
+  try { const r = await fetch(`/api/auth/link?kind=${kind}&token=${encodeURIComponent(token)}`); info = await r.json(); if (!r.ok) return fail(info.error || "This link isn't valid."); }
+  catch (e) { return fail("Couldn't check your link. Try again in a minute."); }
+
+  const pwFields = `<div><label for="pw">${kind === "reset" ? "New password" : "Password"}</label><input id="pw" type="password" autocomplete="new-password" required minlength="10"><div class="meter" id="meter"><i></i></div><div class="hint">At least 10 characters, with letters and numbers.</div></div>
+    <div><label for="pw2">Confirm password</label><input id="pw2" type="password" autocomplete="new-password" required></div>`;
+  if (kind === "invite") {
+    show(`<h1>Set up your account</h1><p>You're joining the JSH Trade Portal${info.customerNo ? ` for <b>${esc(info.customerNo)}</b>` : ""}. Tell us who you are and choose a password.</p>
+      <form id="f"><div><label for="em">Email</label><input id="em" type="email" readonly value="${esc(info.email)}" autocomplete="username"></div>
+      <div><label for="nm">Full name</label><input id="nm" required maxlength="80" autocomplete="name" value="${esc(info.name)}"></div>
+      <div><label for="ph">Mobile or phone</label><input id="ph" type="tel" required maxlength="30" autocomplete="tel" placeholder="04xx xxx xxx" value="${esc(info.phone)}"></div>
+      ${pwFields}<div class="err" id="err" role="alert"></div><button type="submit">Create my account</button></form>`);
+  } else {
+    show(`<h1>Choose a new password</h1><p>For <b>${esc(info.email)}</b>. This signs you out everywhere else.</p>
+      <form id="f"><input type="email" value="${esc(info.email)}" autocomplete="username" hidden>${pwFields}<div class="err" id="err" role="alert"></div><button type="submit">Save new password</button></form>`);
+  }
+  bindMeter();
+  $("#f").addEventListener("submit", async e => {
+    e.preventDefault(); $("#err").textContent = "";
+    if ($("#pw").value !== $("#pw2").value) { $("#err").textContent = "The two passwords don't match."; return; }
+    const btn = $("#f button"); btn.disabled = true;
+    try {
+      const s = kind === "invite"
+        ? await post("/auth/accept", { token, name: $("#nm").value, phone: $("#ph").value, password: $("#pw").value })
+        : await post("/auth/reset", { token, password: $("#pw").value });
+      signedIn(s);
+    } catch (err) { btn.disabled = false; $("#err").textContent = err.message; }
+  });
+})();
+})();
+</script>
+</body>
+</html>

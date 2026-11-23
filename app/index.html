@@ -463,7 +463,7 @@ const Live = {
       const lines = (o.lines || []).filter(l => l.lineType === "Item").map(l => ({ lineNo: l.sequence, itemNo: l.lineObjectNumber, desc: l.description, uom: l.unitOfMeasureCode, qty: l.quantity, unitPrice: l.unitPrice }));
       const shipped = (o.lines || []).filter(l => l.lineType === "Item" && l.shippedQuantity > 0);
       return {
-        portalNo: x.portalNo || o.number, notPortal: !x.portalNo, customerNo: o.customerNumber, createdBy: "", createdAt: (o.orderDate || "") + "T00:00:00Z",
+        portalNo: x.portalNo || o.number, notPortal: !x.portalNo, customerNo: o.customerNumber, createdBy: o.placedBy || "", createdAt: (o.orderDate || "") + "T00:00:00Z",
         header: { orderDate: o.orderDate, requestedDeliveryDate: o.requestedDeliveryDate, customerPO: x.po, contact: "", email: "", phone: "", shipTo: o.customerName || "", billTo: "", terms: "", location: "", priceGroup: "LIST", notes: "" },
         lines, bc: { soNo: o.number, status: o.bcStatus, reviewed: "", submittedAt: (o.orderDate || "") + "T00:00:00Z", releasedAt: "", reviewedAt: "" },
         shipments: shipped.length ? [{ qbtNo: "—", soNo: o.number, date: "", lines: shipped.map(l => ({ itemNo: l.lineObjectNumber, lotNo: "lot via QBT API", qty: l.shippedQuantity })) }] : [],
@@ -581,10 +581,11 @@ function loginView() {
     <div class="login-card">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px"><div class="logo"><span>JSH</span></div><div><h2 style="font-size:22px">JSH Trade Portal</h2><div class="faint" style="font-size:13px">Sign in to your account</div></div></div>
       <form id="loginForm" autocomplete="on" style="margin-top:18px">
-        <div class="field"><label for="lu">Username</label><input class="input" id="lu" name="username" autocomplete="username" required></div>
+        <div class="field"><label for="lu">${Live.on ? "Email" : "Username"}</label><input class="input" id="lu" name="username" autocomplete="username" required></div>
         <div class="field"><label for="lp">Password</label><input class="input" id="lp" name="password" type="password" autocomplete="current-password" required></div>
         <div class="err" id="lerr" role="alert"></div>
         <button class="btn primary" type="submit" style="justify-content:center;padding:13px">Sign in</button>
+        ${Live.on ? `<button type="button" class="link" data-act="forgot" style="justify-self:center">Forgot password?</button>` : ""}
       </form>
       ${Live.on ? `<p class="faint" style="font-size:13px;margin:16px 0 0">Connected to Business Central (sandbox).</p>` : ""}
       <details style="margin-top:18px;font-size:13px;${Live.on ? "display:none" : ""}"><summary class="muted" style="cursor:pointer;font-weight:700">Prototype sign-ins</summary>
@@ -943,7 +944,7 @@ function adminItems() {
 }
 function adminUsers() {
   const S = Store.state;
-  if (Live.on) return `<div class="page-head"><div><h1>Portal users</h1><p class="muted" style="margin:4px 0 0">In the sandbox trial, sign-ins are kept in the PORTAL_USERS setting in Azure. Ask your consultant to add or disable a user.</p></div></div><section class="card"><div class="rule">${ICON.shield}<span>Signed in as ${esc(me().name)} (${esc(me().role)}). Customer sign-in on Microsoft Entra External ID comes next.</span></div></section>`;
+  if (Live.on) return liveUsersView();
   return `<div class="page-head"><div><h1>Portal users</h1><p class="muted" style="margin:4px 0 0">For the trial, sign-ins are set up by hand. Customer self-invite comes later.</p></div><button class="btn primary" data-act="add-user">${ICON.plus.replace("<svg", '<svg width="16" height="16"')} Add user</button></div>
   <section class="card"><div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Customer</th><th>Status</th><th></th></tr></thead><tbody>
   ${S.users.map((u, i) => `<tr style="animation-delay:${i * .03}s"><td><b>${esc(u.name)}</b></td><td class="mono">${esc(u.username)}</td><td><span class="pill ${u.role === "admin" ? "st-confirmed" : "st-shipped"}">${esc(u.role)}</span></td><td>${esc(u.customerNo ? customer(u.customerNo)?.name || u.customerNo : "—")}</td><td>${u.active ? '<span class="pill st-paid">Active</span>' : '<span class="pill st-invoiced">Disabled</span>'}</td><td style="white-space:nowrap">${u.id === session.userId ? '<span class="faint">You</span>' : `<button class="btn sm ghost" data-ureset="${esc(u.id)}">Reset password</button> <button class="btn sm ${u.active ? "danger" : ""}" data-utog="${esc(u.id)}">${u.active ? "Disable" : "Enable"}</button>`}</td></tr>`).join("")}
@@ -1005,6 +1006,50 @@ async function openInvoicePdf(portalNo, btn) {
   } catch (e) { if (win) win.close(); toast(e.message); }
   btn.disabled = false; btn.textContent = label;
 }
+function forgotModal() {
+  openModal(`<h2 style="font-size:22px">Reset your password</h2><p class="muted" style="margin:6px 0 0">Enter the email you sign in with. We'll send you a link to choose a new password.</p>
+    <form id="fgForm" class="grid" style="gap:12px;margin-top:14px"><div class="field"><label for="fge">Email</label><input class="input" id="fge" type="email" autocomplete="email" required value="${esc(($("#lu") || {}).value || "")}"></div>
+    <div class="err" id="fgerr"></div><div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" data-act="close-layer">Cancel</button><button class="btn primary" type="submit">Send reset link</button></div></form>`);
+  $("#fgForm").addEventListener("submit", async e => {
+    e.preventDefault(); const btn = e.target.querySelector("[type=submit]"); btn.disabled = true;
+    try { const r = await Live.api("POST", "/auth/forgot", { email: $("#fge").value }); openModal(`<h2 style="font-size:22px">Check your email</h2><p class="muted">${esc(r.message)} The link works for 1 hour.</p><div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn primary" data-act="close-layer">OK</button></div>`); }
+    catch (err) { btn.disabled = false; $("#fgerr").textContent = err.message; }
+  });
+}
+let liveUsers = null;
+async function loadLiveUsers() { try { liveUsers = (await Live.api("GET", "/users")).value; } catch (e) { liveUsers = { error: e.message }; } if (route.page === "admin-users") render(); }
+function liveUsersView() {
+  if (liveUsers === null) { loadLiveUsers(); return `<div class="page-head"><h1>Portal users</h1></div><section class="card"><div class="empty">Loading users…</div></section>`; }
+  if (liveUsers.error) return `<div class="page-head"><h1>Portal users</h1></div><section class="card"><div class="rule">${ICON.shield}<span>${esc(liveUsers.error)}</span></div></section>`;
+  const S = Store.state; const cname = no => (S.customers.find(c => c.no === no) || {}).name || no;
+  const pillFor = st => st === "active" ? '<span class="pill st-paid">Active</span>' : st === "invited" ? '<span class="pill st-submitted">Invited</span>' : '<span class="pill st-invoiced">Disabled</span>';
+  return `<div class="page-head"><div><h1>Portal users</h1><p class="muted" style="margin:4px 0 0">Invite customers, re-send invites, and switch access off. Invites can also be sent from the Customer card in Business Central.</p></div><button class="btn primary" data-act="invite-user">${ICON.plus.replace("<svg", '<svg width="16" height="16"')} Invite user</button></div>
+  <section class="card"><div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>Customer</th><th>Role</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead><tbody>
+  ${liveUsers.length ? liveUsers.map(u => `<tr style="animation:none"><td><b>${esc(u.name || "—")}</b></td><td>${esc(u.email)}</td><td>${esc(u.phone || "—")}</td><td>${esc(u.customerNo ? cname(u.customerNo) : "—")}</td><td>${esc(u.role)}</td><td>${pillFor(u.status)}</td><td>${dtt(u.lastLogin)}</td><td style="white-space:nowrap">${u.status !== "disabled" ? `<button class="btn sm ghost" data-reinvite="${esc(u.email)}">${u.status === "invited" ? "Re-send invite" : "Send new invite"}</button> <button class="btn sm danger" data-ustatus="${esc(u.email)}|disabled">Disable</button>` : `<button class="btn sm" data-ustatus="${esc(u.email)}|active">Enable</button>`}</td></tr>`).join("") : `<tr><td colspan="8"><div class="empty">No users yet. Invite the first one.</div></td></tr>`}
+  </tbody></table></div></section>`;
+}
+function inviteModal(prefill) {
+  const S = Store.state; const p = prefill || {};
+  openModal(`<h2 style="font-size:22px">${p.email ? "Send a new invite" : "Invite a user"}</h2><p class="muted" style="margin:6px 0 0">They get an email link to set their name, mobile and password. The link expires in 7 days.</p>
+    <form id="ivForm" class="grid" style="gap:12px;margin-top:14px">
+    <div class="field"><label for="ive">Email</label><input class="input" id="ive" type="email" required value="${esc(p.email || "")}" ${p.email ? "readonly" : ""}></div>
+    <div class="field"><label for="ivn">Name (optional)</label><input class="input" id="ivn" maxlength="80" value="${esc(p.name || "")}"></div>
+    <div class="field"><label for="ivr">Role</label><select class="input" id="ivr"><option value="customer" ${p.role !== "admin" ? "selected" : ""}>Customer</option><option value="admin" ${p.role === "admin" ? "selected" : ""}>JSH admin</option></select></div>
+    <div class="field" id="ivcWrap"><label for="ivc">Customer</label><select class="input" id="ivc">${S.customers.map(c => `<option value="${esc(c.no)}" ${p.customerNo === c.no ? "selected" : ""}>${esc(c.no)} · ${esc(c.name)}</option>`).join("")}</select></div>
+    <div class="err" id="iverr"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" data-act="close-layer">Cancel</button><button class="btn primary" type="submit">Send invite</button></div></form>`);
+  const sync = () => { $("#ivcWrap").style.display = $("#ivr").value === "admin" ? "none" : ""; }; $("#ivr").addEventListener("change", sync); sync();
+  $("#ivForm").addEventListener("submit", async e => {
+    e.preventDefault(); const btn = e.target.querySelector("[type=submit]"); btn.disabled = true;
+    try {
+      const r = await Live.api("POST", "/invites", { email: $("#ive").value, name: $("#ivn").value, role: $("#ivr").value, customerNo: $("#ivr").value === "admin" ? "" : $("#ivc").value });
+      liveUsers = null; render();
+      openModal(`<h2 style="font-size:22px">Invite ${r.emailed ? "sent" : "ready"}</h2><p class="muted">${r.emailed ? `An invite email has gone to <b>${esc(r.email)}</b>.` : `Email isn't set up yet${r.mailError ? ` (${esc(r.mailError)})` : ""}, so copy this link and send it to <b>${esc(r.email)}</b> yourself.`}</p>
+        <div class="field" style="margin-top:10px"><label for="ivlink">Invite link (works once, 7 days)</label><input class="input mono" id="ivlink" readonly value="${esc(r.link || "")}"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn ghost" data-act="copy-link">Copy link</button><button class="btn primary" data-act="close-layer">Done</button></div>`);
+    } catch (err) { btn.disabled = false; $("#iverr").textContent = err.message; }
+  });
+}
 function payModal(portalNo) {
   const o = Store.state.orders.find(x => x.portalNo === portalNo);
   openModal(`<div style="text-align:center"><div style="font-size:46px">💳</div><h2 style="font-size:22px;margin-top:6px">Online payments are coming soon</h2>
@@ -1060,6 +1105,8 @@ document.addEventListener("click", e => {
   if (d.ig) { ui.itemGroup = d.ig; render(); return; }
   if (d.pay) { payModal(d.pay); return; }
   if (d.pdf) { openInvoicePdf(d.pdf, t); return; }
+  if (d.reinvite) { const u = (liveUsers || []).find(x => x.email === d.reinvite); inviteModal(u); return; }
+  if (d.ustatus) { const [em, st] = d.ustatus.split("|"); t.disabled = true; Live.api("POST", "/users/status", { email: em, status: st }).then(() => { liveUsers = null; render(); toast(st === "disabled" ? "Access switched off" : "Access switched back on"); }).catch(e => { t.disabled = false; toast(e.message); }); return; }
   if (d.edit) { const o = S.orders.find(x => x.portalNo === d.edit); closeModal(); if (o && editable(o)) startDraft(o); else toast("This order is locked."); return; }
   if (d.sim) { const [a, p] = d.sim.split("|"); simulate(a, p); return; }
   if (d.viewas) { session.viewAs = d.viewas; saveSession(); go("home"); return; }
@@ -1077,6 +1124,9 @@ document.addEventListener("click", e => {
     case "submit-order": submitOrder(); break;
     case "sync": { const b = t; b.disabled = true; b.querySelector("svg").animate([{ transform: "rotate(0)" }, { transform: "rotate(360deg)" }], { duration: 700, iterations: 2 }); Promise.resolve(BC.refresh(activeCustomerNo())).then(() => { Store.save(); setTimeout(() => { render(); toast("Status refreshed from Business Central"); }, reduced ? 0 : 900); }); break; }
     case "add-user": userModal(); break;
+    case "invite-user": inviteModal(); break;
+    case "forgot": forgotModal(); break;
+    case "copy-link": { const el = $("#ivlink"); el.select(); navigator.clipboard.writeText(el.value).then(() => toast("Link copied")).catch(() => toast("Select the link and copy it")); break; }
     case "reset-orders": resetModal("orders"); break;
     case "reset-all": resetModal("all"); break;
   }

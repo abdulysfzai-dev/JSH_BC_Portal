@@ -2,8 +2,9 @@
 const crypto = require("crypto");
 const { app } = require("@azure/functions");
 const { bc, bcBinary, getToken, config, lit } = require("../lib/bc");
-const { login } = require("../lib/session");
-const { json, handler, currentUser, scopeCustomer } = require("../lib/http");
+const store = require("../lib/store");
+const mail = require("../lib/mail");
+const { json, handler, currentUser, scopeCustomer, siteUrl } = require("../lib/http");
 
 const pick = (o, keys) => Object.fromEntries(keys.map(k => [k, o[k]]));
 const ORDER_FIELDS = ["id", "number", "externalDocumentNumber", "orderDate", "requestedDeliveryDate", "customerNumber", "customerName", "status", "fullyShipped", "totalAmountExcludingTax", "totalTaxAmount", "totalAmountIncludingTax", "lastModifiedDateTime"];
@@ -14,12 +15,13 @@ const LINE_FIELDS = ["sequence", "lineType", "lineObjectNumber", "description", 
 app.http("health", {
   route: "health", methods: ["GET"], authLevel: "anonymous",
   handler: async (request, context) => {
-    const c = config(); const user = currentUser(request); const admin = user && user.role === "admin";
+    const c = config(); const user = await currentUser(request); const admin = user && user.role === "admin";
     const out = {
       time: new Date().toISOString(),
-      settings: { BC_TENANT_ID: !!c.tenant, BC_CLIENT_ID: !!c.clientId, BC_CLIENT_SECRET: !!c.secret, BC_ENVIRONMENT: c.env || false, BC_COMPANY_ID: !!c.companyId, SESSION_SECRET: !!process.env.SESSION_SECRET, PORTAL_USERS: (() => { try { return JSON.parse(process.env.PORTAL_USERS || "[]").length; } catch { return "invalid JSON"; } })(), ALLOW_ORDER_CREATE: process.env.ALLOW_ORDER_CREATE === "true" },
+      settings: { BC_TENANT_ID: !!c.tenant, BC_CLIENT_ID: !!c.clientId, BC_CLIENT_SECRET: !!c.secret, BC_ENVIRONMENT: c.env || false, BC_COMPANY_ID: !!c.companyId, SESSION_SECRET: !!process.env.SESSION_SECRET, PORTAL_USERS: (() => { try { return JSON.parse(process.env.PORTAL_USERS || "[]").length; } catch { return "invalid JSON"; } })(), ALLOW_ORDER_CREATE: process.env.ALLOW_ORDER_CREATE === "true", STORAGE_CONNECTION: !!process.env.STORAGE_CONNECTION, MAIL_SENDER: process.env.MAIL_SENDER || false, NOTIFY_STAFF: mail.staff().length, BC_PORTAL_KEY: (process.env.BC_PORTAL_KEY || "").length >= 32 },
       checks: {}
     };
+    if (process.env.STORAGE_CONNECTION) { try { await store.listUsers(); out.checks.storage = "ok"; } catch (e) { out.checks.storage = `failed: ${e.message}`; } }
     try { await getToken(); out.checks.token = "ok"; } catch (e) { out.checks.token = `failed: ${e.message}${e.detail ? " (" + e.detail + ")" : ""}`; return json(200, out); }
     try {
       const r = await bc("GET", "/companies?$select=id,name,displayName", null, { company: false });
@@ -36,20 +38,6 @@ app.http("health", {
     return json(200, out);
   }
 });
-
-// ---------- Sign in ----------
-app.http("login", {
-  route: "auth/login", methods: ["POST"], authLevel: "anonymous",
-  handler: handler(async request => {
-    const b = await request.json().catch(() => ({}));
-    await new Promise(r => setTimeout(r, 300)); // slows down password guessing
-    const s = login(b.username, b.password);
-    if (!s) return json(401, { error: "That username and password don't match." });
-    return json(200, s);
-  }, { auth: false })
-});
-
-app.http("me", { route: "auth/me", methods: ["GET"], authLevel: "anonymous", handler: handler(async (req, ctx, user) => json(200, { user })) });
 
 // ---------- Customers ----------
 app.http("customers", {
@@ -83,6 +71,8 @@ app.http("orders-list", {
     const r = await bc("GET", `/salesOrders?$select=${ORDER_FIELDS.join(",")}&$expand=salesOrderLines($select=${LINE_FIELDS.join(",")})&$orderby=orderDate desc&$top=100${filter}`);
     // Standard API: status "Draft" = BC Open, "Open" = BC Released. Translate so the portal speaks BC.
     const value = r.value.map(o => ({ ...pick(o, ORDER_FIELDS), bcStatus: o.status === "Draft" ? "Open" : o.status === "Open" ? "Released" : o.status, lines: (o.salesOrderLines || []).map(l => pick(l, LINE_FIELDS)) }));
+    const log = await store.orderLog(cust).catch(() => ({}));
+    value.forEach(o => { const m = /^(JSH\d{4,})/.exec(o.externalDocumentNumber || ""); const l = m && log[m[1]]; if (l) o.placedBy = l.name; });
     return json(200, { value, note: "Order reviewed is a custom field: it arrives with the custom order-status API." });
   })
 });
@@ -147,13 +137,21 @@ app.http("orders-create", {
       // Prices come from BC, never from the browser.
       salesOrderLines: lines.map(l => ({ lineType: "Item", lineObjectNumber: String(l.itemNo), quantity: Number(l.quantity) }))
     };
-      const created = await bc("POST", "/salesOrders", body);
+      const created = await bc("POST", "/salesOrders?$expand=salesOrderLines", body);
       return { created, portalNo };
     });
     numberLock = run.catch(() => {});
     const { created, portalNo } = await run;
     ctx.log(`Order ${created.number} created by ${user.username} for ${customerNo} (portal ${portalNo})`);
     const result = { number: created.number, id: created.id, portalOrderNo: portalNo, status: created.status === "Draft" ? "Open" : created.status, totalAmountIncludingTax: created.totalAmountIncludingTax };
+    // Record who placed it, then email the customer and JSH staff. A failed email never fails the order.
+    if (store.enabled()) await store.logOrder({ customerNo, portalNo, soNo: created.number, name: user.name, email: user.email, po }).catch(e => ctx.error(e));
+    try {
+      const custName = created.customerName || customerNo;
+      const t = mail.templates.orderPlaced({ portalNo, soNo: created.number, customerName: custName, placedBy: user.name, po, lines: (created.salesOrderLines || lines.map(l => ({ lineObjectNumber: l.itemNo, quantity: l.quantity }))).map(l => ({ itemNo: l.lineObjectNumber, description: l.description, quantity: l.quantity })), total: created.totalAmountIncludingTax, link: siteUrl(request) });
+      const r = await mail.send({ to: user.email || mail.staff()[0], cc: mail.staff(), ...t });
+      result.emailed = r.sent;
+    } catch (e) { ctx.error(e); result.emailed = false; }
     if (draftId) { recentSubmits.set(draftId, result); setTimeout(() => recentSubmits.delete(draftId), 15 * 60e3); }
     return json(201, result);
   })
