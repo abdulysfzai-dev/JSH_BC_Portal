@@ -431,7 +431,8 @@ function log(type, text) { const S = Store.state; S.log.unshift({ ts: iso(Date.n
 const Live = {
   on: false, token: "", user: null, err: "",
   async detect() {
-    try { const r = await Promise.race([fetch("/api/health", { cache: "no-store" }), new Promise((_, j) => setTimeout(() => j(new Error("t")), 8000))]); if (!r.ok) return false; const h = await r.json(); this.on = !!(h && h.checks && h.checks.token === "ok"); } catch (e) { this.on = false; }
+    // A plain file host (e.g. the claude.ai preview) has no /api, so this fails fast and the portal runs on demo data.
+    try { const r = await Promise.race([fetch("/api/ping", { cache: "no-store" }), new Promise((_, j) => setTimeout(() => j(new Error("t")), 20000))]); if (!r.ok) return false; const h = await r.json(); this.on = !!(h && h.live); } catch (e) { this.on = false; }
     return this.on;
   },
   async api(method, path, body) {
@@ -1138,7 +1139,9 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#layer"
 
 /* ============ boot ============ */
 (async () => {
-  if (await Live.detect()) {
+  const slow = setTimeout(() => { if (!me()) $("#app").innerHTML = `<div style="display:grid;place-items:center;min-height:100vh;text-align:center"><div><div class="logo" style="width:64px;height:64px;font-size:18px;margin:0 auto 14px"><span>JSH</span></div><div class="muted" style="font-weight:700">Waking up the portal…</div><div class="faint" style="font-size:13px;margin-top:4px">First visit in a while takes a few seconds.</div></div></div>`; }, 2500);
+  const on = await Live.detect(); clearTimeout(slow);
+  if (on) {
     Store.state = demoState(); Store.state.orders = []; Store.state.log = []; Store.mode = "live"; Store.save = async () => {};
     if (await Live.resume()) { const h = location.hash.slice(1); route.page = h && h !== "create" ? h : (Live.user.role === "admin" ? "admin-overview" : "home"); await liveSignedIn(); return; }
     session = null; saveSession(); render(); return;

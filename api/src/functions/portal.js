@@ -10,6 +10,13 @@ const pick = (o, keys) => Object.fromEntries(keys.map(k => [k, o[k]]));
 const ORDER_FIELDS = ["id", "number", "externalDocumentNumber", "orderDate", "requestedDeliveryDate", "customerNumber", "customerName", "status", "fullyShipped", "totalAmountExcludingTax", "totalTaxAmount", "totalAmountIncludingTax", "lastModifiedDateTime"];
 const LINE_FIELDS = ["sequence", "lineType", "lineObjectNumber", "description", "unitOfMeasureCode", "quantity", "unitPrice", "netAmount", "amountIncludingTax", "shippedQuantity", "invoicedQuantity"];
 
+// ---------- Ping: is the back end there? (no BC calls, used on page load) ----------
+app.http("ping", { route: "ping", methods: ["GET"], authLevel: "anonymous", handler: async () => json(200, { ok: true, live: !!process.env.BC_CLIENT_ID }) });
+
+// Short in-memory cache for slow-changing lists (customers, items). Per instance, 5 minutes.
+const cache = new Map();
+async function cached(key, ms, fn) { const c = cache.get(key); if (c && Date.now() - c.t < ms) return c.v; const v = await fn(); cache.set(key, { t: Date.now(), v }); return v; }
+
 // ---------- Health: is the BC connection working? ----------
 // Anyone gets yes/no checks. A signed-in admin also gets company names/ids and sample counts.
 app.http("health", {
@@ -45,10 +52,10 @@ app.http("customers", {
   handler: handler(async (request, ctx, user) => {
     const fields = "number,displayName,email,phoneNumber,addressLine1,addressLine2,city,state,postalCode,paymentTermsId,blocked";
     if (user.role === "admin") {
-      const r = await bc("GET", `/customers?$select=${fields}&$orderby=number&$top=200`);
+      const r = await cached("customers:all", 300e3, () => bc("GET", `/customers?$select=${fields}&$orderby=number&$top=200`));
       return json(200, { value: r.value });
     }
-    const r = await bc("GET", `/customers?$filter=number eq ${lit(user.customerNo)}&$select=${fields}`);
+    const r = await cached("customers:" + user.customerNo, 300e3, () => bc("GET", `/customers?$filter=number eq ${lit(user.customerNo)}&$select=${fields}`));
     return json(200, { value: r.value });
   })
 });
@@ -57,7 +64,8 @@ app.http("customers", {
 app.http("items", {
   route: "items", methods: ["GET"], authLevel: "anonymous",
   handler: handler(async () => {
-    const r = await bc("GET", "/items?$filter=blocked eq false&$select=id,number,displayName,itemCategoryCode,baseUnitOfMeasureCode,unitPrice,inventory,gtin&$orderby=number&$top=500");
+    // "inventory" left out on purpose: BC calculates it per item, which makes the list slow.
+    const r = await cached("items", 300e3, () => bc("GET", "/items?$filter=blocked eq false&$select=id,number,displayName,itemCategoryCode,baseUnitOfMeasureCode,unitPrice&$orderby=number&$top=500"));
     return json(200, { value: r.value, note: "Standard items list. Customer-specific prices arrive with the custom price-list API." });
   })
 });
