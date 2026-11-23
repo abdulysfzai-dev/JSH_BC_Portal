@@ -1,7 +1,7 @@
 "use strict";
 const crypto = require("crypto");
 const { app } = require("@azure/functions");
-const { bc, getToken, config, lit } = require("../lib/bc");
+const { bc, bcBinary, getToken, config, lit } = require("../lib/bc");
 const { login } = require("../lib/session");
 const { json, handler, currentUser, scopeCustomer } = require("../lib/http");
 
@@ -167,6 +167,19 @@ app.http("invoices", {
     const filter = cust ? `&$filter=customerNumber eq ${lit(cust)}` : "";
     const r = await bc("GET", `/salesInvoices?$select=id,number,invoiceDate,dueDate,orderNumber,externalDocumentNumber,customerNumber,customerName,totalAmountIncludingTax,remainingAmount,status&$expand=salesInvoiceLines($select=sequence,lineType,lineObjectNumber,description,unitOfMeasureCode,quantity,unitPrice)&$orderby=invoiceDate desc&$top=100${filter}`);
     return json(200, { value: r.value.map(({ salesInvoiceLines, ...v }) => ({ ...v, lines: salesInvoiceLines || [] })) });
+  })
+});
+
+// ---------- Invoice PDF, rendered by BC with its own invoice layout ----------
+app.http("invoice-pdf", {
+  route: "invoices/{id}/pdf", methods: ["GET"], authLevel: "anonymous",
+  handler: handler(async (request, ctx, user) => {
+    const id = String(request.params.id || "");
+    if (!/^[0-9a-fA-F-]{36}$/.test(id)) return json(400, { error: "Invalid invoice." });
+    const inv = await bc("GET", `/salesInvoices(${id})?$select=number,customerNumber`);
+    if (user.role !== "admin" && inv.customerNumber !== user.customerNo) return json(404, { error: "Invoice not found." });
+    const pdf = await bcBinary(`/salesInvoices(${id})/pdfDocument/pdfDocumentContent`);
+    return { status: 200, body: pdf, headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="Invoice-${String(inv.number).replace(/[^\w-]/g, "")}.pdf"`, "Cache-Control": "no-store" } };
   })
 });
 

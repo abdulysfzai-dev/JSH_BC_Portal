@@ -80,7 +80,17 @@ async function bc(method, path, body, opts = {}) {
   return json;
 }
 
+// Binary GET (e.g. a PDF). Read-only by definition.
+async function bcBinary(path) {
+  const c = config();
+  if (!c.companyId) throw new BcError(500, "Missing app setting: BC_COMPANY_ID");
+  const token = await getToken();
+  const res = await fetch(apiBase() + `/companies(${c.companyId})` + path, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) { let m = `BC returned ${res.status}`; try { const j = await res.json(); if (j.error) m = j.error.message; } catch {} throw new BcError(res.status === 404 ? 404 : 502, m); }
+  return Buffer.from(await res.arrayBuffer());
+}
+
 // OData string literal escaping: a single quote becomes two.
 const lit = v => `'${String(v).replace(/'/g, "''")}'`;
 
-module.exports = { bc, getToken, config, apiBase, lit, BcError, ALLOWED_WRITES };
+module.exports = { bc, bcBinary, getToken, config, apiBase, lit, BcError, ALLOWED_WRITES };

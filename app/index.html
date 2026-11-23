@@ -471,7 +471,7 @@ const Live = {
       };
     });
     inv.value.forEach(v => {
-      const invObj = { no: v.number, soNo: v.orderNumber, portalNo: "", date: v.invoiceDate, dueDate: v.dueDate, amount: v.totalAmountIncludingTax, remaining: v.remainingAmount, paidAt: "" };
+      const invObj = { id: v.id, no: v.number, soNo: v.orderNumber, portalNo: "", date: v.invoiceDate, dueDate: v.dueDate, amount: v.totalAmountIncludingTax, remaining: v.remainingAmount, paidAt: "" };
       const ord = v.orderNumber && orders.find(o => o.bc.soNo === v.orderNumber && !o.invoice);
       if (ord) { ord.invoice = invObj; return; }
       // Fully invoiced orders no longer exist in BC, so the invoice stands in for the order.
@@ -706,10 +706,10 @@ function listView(st) {
 function invoiceView(st) {
   const list = myOrders().filter(o => stage(o) === st).sort((a, b) => b.invoice.date.localeCompare(a.invoice.date));
   const sum = list.reduce((a, o) => a + (st === "paid" ? o.invoice.amount : o.invoice.remaining), 0);
-  const rows = list.map((o, i) => { const v = o.invoice; return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * .03}s"><td class="mono"><b>${esc(v.no)}</b></td><td class="mono">${esc(o.bc.soNo)}</td><td class="mono">${esc(pno(o))}</td><td>${dt(v.date)}</td><td>${st === "paid" ? dt(v.paidAt) : `${dt(v.dueDate)} ${isOverdue(o) ? '<span class="pill st-overdue" style="margin-left:4px">Overdue</span>' : ""}`}</td><td class="r num">${money(v.amount)}</td>${st === "paid" ? "" : `<td class="r num"><b>${money(v.remaining)}</b></td><td class="r"><button class="btn sm primary" data-pay="${esc(o.portalNo)}">Pay now</button></td>`}</tr>`; }).join("");
+  const rows = list.map((o, i) => { const v = o.invoice; return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * .03}s"><td class="mono"><b>${esc(v.no)}</b></td><td class="mono">${esc(o.bc.soNo)}</td><td class="mono">${esc(pno(o))}</td><td>${dt(v.date)}</td><td>${st === "paid" ? dt(v.paidAt) : `${dt(v.dueDate)} ${isOverdue(o) ? '<span class="pill st-overdue" style="margin-left:4px">Overdue</span>' : ""}`}</td><td class="r num">${money(v.amount)}</td>${st === "paid" ? `<td class="r"><button class="btn sm ghost" data-pdf="${esc(o.portalNo)}">Invoice PDF</button></td>` : `<td class="r num"><b>${money(v.remaining)}</b></td><td class="r" style="white-space:nowrap"><button class="btn sm ghost" data-pdf="${esc(o.portalNo)}">PDF</button> <button class="btn sm primary" data-pay="${esc(o.portalNo)}">Pay now</button></td>`}</tr>`; }).join("");
   return `<div class="page-head"><div><button class="crumb" data-go="home">← Home</button><h1>${st === "paid" ? "Invoices Paid" : "Invoices To Be Paid"}</h1><p class="muted" style="margin:4px 0 0">${st === "paid" ? "Invoices that have been settled in full." : "Posted invoices with an outstanding balance. Each one shows its BC sales order and portal order number."}</p></div>
   <div class="card" style="padding:12px 18px"><div class="faint" style="font-size:12px;font-weight:700;text-transform:uppercase">${st === "paid" ? "Total paid" : "Total outstanding"}</div><div class="num" style="font-family:var(--display);font-size:24px;font-weight:800" data-count="${sum}" data-fmt="money">${money(sum)}</div></div></div>
-  <section class="card">${list.length ? `<div class="tbl-wrap"><table><thead><tr><th>Invoice</th><th>BC order</th><th>Portal order</th><th>Invoice date</th><th>${st === "paid" ? "Paid on" : "Due"}</th><th class="r">Amount</th>${st === "paid" ? "" : '<th class="r">Balance</th><th></th>'}</tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty"><div class="big">${st === "paid" ? "💸" : "🎉"}</div>${st === "paid" ? "No paid invoices yet." : "You're all paid up."}</div>`}</section>`;
+  <section class="card">${list.length ? `<div class="tbl-wrap"><table><thead><tr><th>Invoice</th><th>BC order</th><th>Portal order</th><th>Invoice date</th><th>${st === "paid" ? "Paid on" : "Due"}</th><th class="r">Amount</th>${st === "paid" ? "<th></th>" : '<th class="r">Balance</th><th></th>'}</tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty"><div class="big">${st === "paid" ? "💸" : "🎉"}</div>${st === "paid" ? "No paid invoices yet." : "You're all paid up."}</div>`}</section>`;
 }
 
 /* ============ create / edit order ============ */
@@ -849,6 +849,7 @@ function openOrder(portalNo) {
       ${custView() && editable(o) && o.bc.status === "Open" ? `<button class="btn dark" data-edit="${esc(o.portalNo)}">Edit order</button>` : ""}
       ${custView() && !editable(o) && st === "submitted" ? `<span class="rule">${ICON.shield}Released in BC. Edits are locked.</span>` : ""}
       ${custView() && st === "invoiced" ? `<button class="btn primary" data-pay="${esc(o.portalNo)}">Pay now</button>` : ""}
+      ${o.invoice ? `<button class="btn ghost" data-pdf="${esc(o.portalNo)}">Invoice PDF</button>` : ""}
     </div>
     ${admin ? simPanel(o) : ""}
   </aside>`;
@@ -990,6 +991,20 @@ function confetti() {
   let f = 0; const tick = () => { ctx.clearRect(0, 0, cv.width, cv.height); ps.forEach(p => { p.vy += .35; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.a += p.va; ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a); ctx.fillStyle = p.c; ctx.fillRect(-p.r / 2, -p.r / 4, p.r, p.r / 2); ctx.restore(); }); if (++f < 150) requestAnimationFrame(tick); else ctx.clearRect(0, 0, cv.width, cv.height); };
   tick();
 }
+async function openInvoicePdf(portalNo, btn) {
+  const o = Store.state.orders.find(x => x.portalNo === portalNo); if (!o || !o.invoice) return;
+  if (!Live.on || !o.invoice.id) { toast("Invoice PDFs come from Business Central. Not available on demo data."); return; }
+  const win = window.open("", "_blank"); // open first, inside the click, so pop-up blockers allow it
+  const label = btn.textContent; btn.disabled = true; btn.textContent = "Loading…";
+  try {
+    const r = await fetch(`/api/invoices/${o.invoice.id}/pdf`, { headers: { "x-portal-token": Live.token } });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || "Couldn't get the invoice from Business Central."); }
+    const url = URL.createObjectURL(await r.blob());
+    if (win) win.location.href = url; else { const a = document.createElement("a"); a.href = url; a.download = `Invoice-${o.invoice.no}.pdf`; a.click(); }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) { if (win) win.close(); toast(e.message); }
+  btn.disabled = false; btn.textContent = label;
+}
 function payModal(portalNo) {
   const o = Store.state.orders.find(x => x.portalNo === portalNo);
   openModal(`<div style="text-align:center"><div style="font-size:46px">💳</div><h2 style="font-size:22px;margin-top:6px">Online payments are coming soon</h2>
@@ -1044,6 +1059,7 @@ document.addEventListener("click", e => {
   if (d.af) { ui.adminFilter = d.af; render(); return; }
   if (d.ig) { ui.itemGroup = d.ig; render(); return; }
   if (d.pay) { payModal(d.pay); return; }
+  if (d.pdf) { openInvoicePdf(d.pdf, t); return; }
   if (d.edit) { const o = S.orders.find(x => x.portalNo === d.edit); closeModal(); if (o && editable(o)) startDraft(o); else toast("This order is locked."); return; }
   if (d.sim) { const [a, p] = d.sim.split("|"); simulate(a, p); return; }
   if (d.viewas) { session.viewAs = d.viewas; saveSession(); go("home"); return; }
