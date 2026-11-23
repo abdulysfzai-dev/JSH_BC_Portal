@@ -154,3 +154,18 @@ app.http("users-status", {
     return json(200, { ok: true, status: u.status });
   }, { role: "admin" })
 });
+
+// ---------- test email (admin) ----------
+app.http("mail-test", {
+  route: "mail/test", methods: ["POST"], authLevel: "anonymous",
+  handler: handler(async request => {
+    const b = await request.json().catch(() => ({}));
+    const to = store.keyOf(b.to);
+    if (!EMAIL_RE.test(to)) return json(400, { error: "Enter a valid email address." });
+    if (!mail.enabled()) return json(400, { error: "MAIL_SENDER isn't set in Azure." });
+    try {
+      await mail.send({ to, subject: "JSH Trade Portal test email", html: `<p>This is a test email from the JSH Trade Portal, sent as ${process.env.MAIL_SENDER} at ${new Date().toISOString()}.</p><p>If you can read this, portal email works.</p>` });
+      return json(200, { ok: true, message: `Sent to ${to} from ${process.env.MAIL_SENDER}. Check the inbox and junk folder.` });
+    } catch (e) { return json(200, { ok: false, message: e.message }); }
+  }, { role: "admin" })
+});
