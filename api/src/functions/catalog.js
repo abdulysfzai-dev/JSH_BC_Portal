@@ -81,12 +81,13 @@ app.http("shipments", {
     ]);
     const sos = [...new Set([...o.value.map(x => x.number), ...i.value.map(x => x.orderNumber)].filter(Boolean))];
     const bySo = {};
-    for (let k = 0; k < sos.length; k += 8) {
-      const part = sos.slice(k, k + 8);
-      const filter = part.flatMap(n => [`orderNumber eq ${lit(n)}`, `wholeSaleOrderNumber eq ${lit(n)}`]).join(" or ");
+    // QBT holds the BC sales order number in orderNumber.
+    for (let k = 0; k < sos.length; k += 15) {
+      const part = sos.slice(k, k + 15);
+      const filter = part.map(n => `orderNumber eq ${lit(n)}`).join(" or ");
       const r = await bcAll(`/qbtHeaders?$filter=${filter}&$expand=qbtLines`, { custom: true });
       for (const h of r) {
-        const so = part.includes(h.wholeSaleOrderNumber) ? h.wholeSaleOrderNumber : h.orderNumber;
+        const so = h.orderNumber;
         (bySo[so] = bySo[so] || []).push({
           shipmentNo: String(h.shipmentNumber), date: h.shipmentDate, carrier: h.carrier || "", tracking: h.trackingNumber || "", completed: !!h.completed,
           lines: (h.qbtLines || []).map(l => ({ itemNo: l.itemNumber, lotNo: l.batchNumber || "", qty: l.shippingQuantity, expiry: l.expiryDate && l.expiryDate !== "0001-01-01" ? l.expiryDate : "" }))
