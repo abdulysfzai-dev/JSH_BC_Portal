@@ -1,0 +1,27 @@
+{
+  "id": "b15622d6-a42f-49d0-8431-44442a6a8e1a",
+  "name": "JSH Trade Portal Connector",
+  "publisher": "JSHealth",
+  "version": "1.0.0.0",
+  "brief": "Fields and a read/create API used by the JSH Trade Portal.",
+  "description": "Adds Portal Order Placed By and Portal Order Notes to sales orders (carried to posted shipments and invoices) and a portal sales order API. Additive only: no existing objects, code or layouts are changed.",
+  "privacyStatement": "",
+  "EULA": "",
+  "help": "",
+  "url": "",
+  "logo": "",
+  "dependencies": [],
+  "screenshots": [],
+  "platform": "24.0.0.0",
+  "application": "24.0.0.0",
+  "idRanges": [
+    { "from": 99700, "to": 99749 }
+  ],
+  "resourceExposurePolicy": {
+    "allowDebugging": true,
+    "allowDownloadingSource": true,
+    "includeSourceInSymbolFile": true
+  },
+  "runtime": "13.0",
+  "features": [ "NoImplicitWith", "TranslationFile" ]
+}

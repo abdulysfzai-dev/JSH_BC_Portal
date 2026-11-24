@@ -26,7 +26,7 @@ app.http("health", {
     const c = config(); const user = await currentUser(request); const admin = user && user.role === "admin";
     const out = {
       time: new Date().toISOString(),
-      settings: { BC_TENANT_ID: !!c.tenant, BC_CLIENT_ID: !!c.clientId, BC_CLIENT_SECRET: !!c.secret, BC_ENVIRONMENT: c.env || false, BC_COMPANY_ID: !!c.companyId, SESSION_SECRET: !!process.env.SESSION_SECRET, PORTAL_USERS: (() => { try { return JSON.parse(process.env.PORTAL_USERS || "[]").length; } catch { return "invalid JSON"; } })(), ALLOW_ORDER_CREATE: process.env.ALLOW_ORDER_CREATE === "true", STORAGE_CONNECTION: !!process.env.STORAGE_CONNECTION, MAIL_SENDER: process.env.MAIL_SENDER || false, NOTIFY_STAFF: mail.staff().length, BC_PORTAL_KEY: (process.env.BC_PORTAL_KEY || "").length >= 32 },
+      settings: { BC_TENANT_ID: !!c.tenant, BC_CLIENT_ID: !!c.clientId, BC_CLIENT_SECRET: !!c.secret, BC_ENVIRONMENT: c.env || false, BC_COMPANY_ID: !!c.companyId, SESSION_SECRET: !!process.env.SESSION_SECRET, PORTAL_USERS: (() => { try { return JSON.parse(process.env.PORTAL_USERS || "[]").length; } catch { return "invalid JSON"; } })(), ALLOW_ORDER_CREATE: process.env.ALLOW_ORDER_CREATE === "true", PORTAL_ORDER_API: process.env.PORTAL_ORDER_API === "true", STORAGE_CONNECTION: !!process.env.STORAGE_CONNECTION, MAIL_SENDER: process.env.MAIL_SENDER || false, NOTIFY_STAFF: mail.staff().length, BC_PORTAL_KEY: (process.env.BC_PORTAL_KEY || "").length >= 32 },
       checks: {}
     };
     if (process.env.STORAGE_CONNECTION) { try { await store.listUsers(); out.checks.storage = "ok"; } catch (e) { out.checks.storage = `failed: ${e.message}`; } }
@@ -41,6 +41,10 @@ app.http("health", {
       for (const [k, p] of [["customers", "/customers?$top=3&$select=number,displayName"], ["items", "/items?$top=3&$select=number,displayName,unitPrice"], ["salesOrders", "/salesOrders?$top=3&$select=number,customerNumber,status"], ["salesInvoices", "/salesInvoices?$top=3&$select=number,customerNumber,status,remainingAmount"]]) {
         try { const r = await bc("GET", p); out.checks[k] = `ok (${r.value.length} sample)`; if (admin) (out.samples = out.samples || {})[k] = r.value; }
         catch (e) { out.checks[k] = `failed: ${e.message}`; }
+      }
+      if (process.env.PORTAL_ORDER_API === "true") {
+        try { const r = await bc("GET", "/portalSalesOrders?$top=2&$select=number,status,orderReviewed,yourReference,portalOrderPlacedBy", null, { custom: "portal" }); out.checks["portalSalesOrders (connector)"] = `ok (${r.value.length} sample)`; if (admin) (out.samples = out.samples || {})["portalSalesOrders (connector)"] = r.value; }
+        catch (e) { out.checks["portalSalesOrders (connector)"] = `failed: ${e.message}`; }
       }
       // JSH custom APIs (read-only)
       for (const [k, p] of [["salesPriceListLines (custom)", "/salesPriceListLines?$top=3"], ["qbtHeaders + qbtLines (custom)", "/qbtHeaders?$top=2&$expand=qbtLines"]]) {
@@ -93,6 +97,17 @@ app.http("orders-list", {
     const r = await bc("GET", `/salesOrders?$select=${ORDER_FIELDS.join(",")}&$expand=salesOrderLines($select=${LINE_FIELDS.join(",")})&$orderby=orderDate desc&$top=100${filter}`);
     // Standard API: status "Draft" = BC Open, "Open" = BC Released. Translate so the portal speaks BC.
     const value = r.value.map(o => ({ ...pick(o, ORDER_FIELDS), bcStatus: o.status === "Draft" ? "Open" : o.status === "Open" ? "Released" : o.status, lines: (o.salesOrderLines || []).map(l => pick(l, LINE_FIELDS)) }));
+    // With the connector extension installed: add Order Reviewed, Your Reference, Placed By and Notes from BC.
+    if (process.env.PORTAL_ORDER_API === "true" && value.length) {
+      const nos = value.map(o => o.number);
+      for (let k = 0; k < nos.length; k += 15) {
+        const part = nos.slice(k, k + 15);
+        try {
+          const r = await bc("GET", `/portalSalesOrders?$filter=${part.map(n => `number eq ${lit(n)}`).join(" or ")}&$select=number,orderReviewed,yourReference,portalOrderPlacedBy,portalOrderNotes,status`, null, { custom: "portal" });
+          for (const x of r.value) { const o = value.find(v => v.number === x.number); if (o) Object.assign(o, { orderReviewed: x.orderReviewed, yourReference: x.yourReference, placedByBc: x.portalOrderPlacedBy, notes: x.portalOrderNotes }); }
+        } catch (e) { ctx.error(e); }
+      }
+    }
     const log = await store.orderLog(cust).catch(() => ({}));
     value.forEach(o => { const m = /^(JSH\d{4,})/.exec(o.externalDocumentNumber || ""); const l = m && log[m[1]]; if (l) o.placedBy = l.name; });
     return json(200, { value, note: "Order reviewed is a custom field: it arrives with the custom order-status API." });
@@ -137,7 +152,7 @@ app.http("orders-create", {
       const q = Number(l.quantity); if (!(q > 0 && q <= 100000 && Number.isFinite(q))) return json(400, { error: `Invalid quantity for ${l.itemNo}` });
     }
     // Interim: the customer PO rides along in External Document No. until "Your Reference" is available through the custom API.
-    const po = String((b.header && b.header.customerPO) || "").replace(/[^\w\-\/ .]/g, "").slice(0, 25);
+    const po = String((b.header && b.header.customerPO) || "").replace(/[^\w\-\/ .]/g, "").slice(0, process.env.PORTAL_ORDER_API === "true" ? 35 : 25);
 
     // Every line must be on the customer's own price list (Customer Price Group), checked here, not trusted from the browser.
     const pl = await priceListFor(customerNo);
@@ -150,6 +165,19 @@ app.http("orders-create", {
     // Take the next number and create the order inside one lock, so numbers never collide on this instance.
     const run = numberLock.then(async () => {
       const portalNo = fmtPortalNo((await highestPortalNo()) + 1);
+      if (process.env.PORTAL_ORDER_API === "true") {
+        // Connector extension: portal no. in External Document No., PO in Your Reference, plus Placed By and Notes.
+        const placedBy = `${user.name}${user.email ? ` (${user.email}${user.phone ? ", " + user.phone : ""})` : ""}`.slice(0, 100);
+        const pbody = {
+          customerNumber: customerNo, externalDocumentNumber: portalNo, yourReference: po.slice(0, 35),
+          orderDate: new Date().toISOString().slice(0, 10),
+          ...(h.requestedDeliveryDate && /^\d{4}-\d{2}-\d{2}$/.test(h.requestedDeliveryDate) ? { requestedDeliveryDate: h.requestedDeliveryDate } : {}),
+          portalOrderPlacedBy: placedBy, portalOrderNotes: String(h.notes || "").replace(/[\u0000-\u0008\u000b-\u001f]/g, "").slice(0, 250),
+          portalSalesOrderLines: lines.map(l => ({ itemNumber: String(l.itemNo), quantity: Number(l.quantity), ...(byItem.get(String(l.itemNo)).uom ? { unitOfMeasureCode: byItem.get(String(l.itemNo)).uom } : {}) }))
+        };
+        const c = await bc("POST", "/portalSalesOrders?$expand=portalSalesOrderLines", pbody, { custom: "portal" });
+        return { created: { id: c.id, number: c.number, status: c.status === "Released" ? "Released" : "Draft", customerName: c.customerName, totalAmountIncludingTax: c.amountIncludingVAT, salesOrderLines: (c.portalSalesOrderLines || []).map(l => ({ lineObjectNumber: l.itemNumber, description: l.description, quantity: l.quantity })) }, portalNo };
+      }
       const extDoc = (po ? `${portalNo}/${po}` : portalNo).slice(0, 35);
       const body = {
       customerNumber: customerNo,

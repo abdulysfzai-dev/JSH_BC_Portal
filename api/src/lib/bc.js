@@ -49,17 +49,20 @@ async function getToken() {
 }
 
 // Standard APIs live at /api/v2.0. JSH's own APIs at /api/<publisher>/<group>/<version> (CUSTOM_API_PATH).
+const PORTAL_API_PATH = "JSHealth/portal/v1.0"; // the JSH Trade Portal Connector extension
 function apiBase(custom) {
   const c = config();
-  const path = custom ? (process.env.CUSTOM_API_PATH || "JSHealth/sales/v1.0") : "v2.0";
+  const path = custom === "portal" ? PORTAL_API_PATH : custom ? (process.env.CUSTOM_API_PATH || "JSHealth/sales/v1.0") : "v2.0";
   return `${c.apiRoot}/v2.0/${encodeURIComponent(c.tenant)}/${encodeURIComponent(c.env)}/api/${path}`;
 }
 
 // path is relative to the company, e.g. "/salesOrders?$top=5". Use { company: false } for "/companies".
 async function bc(method, path, body, opts = {}) {
   const c = config();
-  if (opts.custom && method !== "GET") throw new BcError(403, "Blocked by portal data rule: JSH custom APIs are read-only");
-  if (method !== "GET") {
+  // JSH's own APIs are read-only. The portal connector allows exactly one write: creating a portal sales order.
+  if (opts.custom && method !== "GET" && !(opts.custom === "portal" && method === "POST" && /^\/portalSalesOrders(\?|$)/.test(path)))
+    throw new BcError(403, "Blocked by portal data rule: JSH custom APIs are read-only");
+  if (method !== "GET" && opts.custom !== "portal") {
     const bare = path.split("?")[0];
     if (!ALLOWED_WRITES.some(r => r.method === method && r.path.test(bare))) {
       throw new BcError(403, `Blocked by portal data rule: ${method} ${bare} is not allowed`);
