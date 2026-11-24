@@ -48,14 +48,17 @@ async function getToken() {
   return tokenCache.value;
 }
 
-function apiBase() {
+// Standard APIs live at /api/v2.0. JSH's own APIs at /api/<publisher>/<group>/<version> (CUSTOM_API_PATH).
+function apiBase(custom) {
   const c = config();
-  return `${c.apiRoot}/v2.0/${encodeURIComponent(c.tenant)}/${encodeURIComponent(c.env)}/api/v2.0`;
+  const path = custom ? (process.env.CUSTOM_API_PATH || "JSHealth/sales/v1.0") : "v2.0";
+  return `${c.apiRoot}/v2.0/${encodeURIComponent(c.tenant)}/${encodeURIComponent(c.env)}/api/${path}`;
 }
 
 // path is relative to the company, e.g. "/salesOrders?$top=5". Use { company: false } for "/companies".
 async function bc(method, path, body, opts = {}) {
   const c = config();
+  if (opts.custom && method !== "GET") throw new BcError(403, "Blocked by portal data rule: JSH custom APIs are read-only");
   if (method !== "GET") {
     const bare = path.split("?")[0];
     if (!ALLOWED_WRITES.some(r => r.method === method && r.path.test(bare))) {
@@ -64,7 +67,7 @@ async function bc(method, path, body, opts = {}) {
   }
   const useCompany = opts.company !== false;
   if (useCompany && !c.companyId) throw new BcError(500, "Missing app setting: BC_COMPANY_ID");
-  const url = apiBase() + (useCompany ? `/companies(${c.companyId})` : "") + path;
+  const url = apiBase(opts.custom) + (useCompany ? `/companies(${c.companyId})` : "") + path;
   const token = await getToken();
   const res = await fetch(url, {
     method,

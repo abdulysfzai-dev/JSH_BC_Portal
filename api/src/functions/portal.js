@@ -41,6 +41,11 @@ app.http("health", {
         try { const r = await bc("GET", p); out.checks[k] = `ok (${r.value.length} sample)`; if (admin) (out.samples = out.samples || {})[k] = r.value; }
         catch (e) { out.checks[k] = `failed: ${e.message}`; }
       }
+      // JSH custom APIs (read-only)
+      for (const [k, p] of [["salesPriceListLines (custom)", "/salesPriceListLines?$top=3"], ["qbtHeaders + qbtLines (custom)", "/qbtHeaders?$top=2&$expand=qbtLines"]]) {
+        try { const r = await bc("GET", p, null, { custom: true }); out.checks[k] = `ok (${r.value.length} sample)`; if (admin) (out.samples = out.samples || {})[k] = r.value; }
+        catch (e) { out.checks[k] = `failed: ${e.message}`; }
+      }
     }
     return json(200, out);
   }
