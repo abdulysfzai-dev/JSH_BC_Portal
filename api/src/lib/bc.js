@@ -67,7 +67,7 @@ async function bc(method, path, body, opts = {}) {
   }
   const useCompany = opts.company !== false;
   if (useCompany && !c.companyId) throw new BcError(500, "Missing app setting: BC_COMPANY_ID");
-  const url = apiBase(opts.custom) + (useCompany ? `/companies(${c.companyId})` : "") + path;
+  const url = /^https:\/\//.test(path) && method === "GET" && path.startsWith(c.apiRoot) ? path : apiBase(opts.custom) + (useCompany ? `/companies(${c.companyId})` : "") + path;
   const token = await getToken();
   const res = await fetch(url, {
     method,
@@ -83,6 +83,13 @@ async function bc(method, path, body, opts = {}) {
   return json;
 }
 
+// GET every page of a list (BC pages large results with @odata.nextLink).
+async function bcAll(path, opts = {}, max = 20000) {
+  let r = await bc("GET", path, null, opts); const out = [...r.value];
+  while (r["@odata.nextLink"] && out.length < max) { r = await bc("GET", r["@odata.nextLink"], null, opts); out.push(...r.value); }
+  return out;
+}
+
 // Binary GET (e.g. a PDF). Read-only by definition.
 async function bcBinary(path) {
   const c = config();
@@ -93,7 +100,7 @@ async function bcBinary(path) {
   return Buffer.from(await res.arrayBuffer());
 }
 
-// OData string literal escaping: a single quote becomes two.
-const lit = v => `'${String(v).replace(/'/g, "''")}'`;
+// OData string literal for use inside a URL: quotes doubled, then URL-encoded (so values like "30%" or "A&B" are safe).
+const lit = v => `'${encodeURIComponent(String(v).replace(/'/g, "''"))}'`;
 
-module.exports = { bc, bcBinary, getToken, config, apiBase, lit, BcError, ALLOWED_WRITES };
+module.exports = { bc, bcAll, bcBinary, getToken, config, apiBase, lit, BcError, ALLOWED_WRITES };

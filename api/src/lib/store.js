@@ -70,4 +70,16 @@ async function orderLog(customerNo) {
   return out;
 }
 
-module.exports = { enabled, getUser, saveUser, listUsers, createToken, readToken, useToken, logOrder, orderLog, keyOf };
+// ---------- per-customer portal settings (Customer Price Group until BC sends it) ----------
+async function getCustomerSettings() {
+  if (!enabled()) return {};
+  const t = await table("PortalCustomers"); const out = {};
+  for await (const e of t.listEntities()) out[e.rowKey] = { priceGroup: e.priceGroup || "" };
+  return out;
+}
+async function setCustomerPriceGroup(customerNo, priceGroup) {
+  const t = await table("PortalCustomers");
+  await t.upsertEntity({ partitionKey: "customer", rowKey: String(customerNo), priceGroup: String(priceGroup || "") }, "Merge");
+}
+
+module.exports = { getCustomerSettings, setCustomerPriceGroup, enabled, getUser, saveUser, listUsers, createToken, readToken, useToken, logOrder, orderLog, keyOf };

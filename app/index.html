@@ -453,11 +453,17 @@ const Live = {
   },
   async load() {
     const u = this.user; const S = Store.state;
-    const [cs, its, os, inv] = await Promise.all([this.api("GET", "/customers"), this.api("GET", "/items"), this.api("GET", "/orders"), this.api("GET", "/invoices")]);
+    const cust = u.role === "customer" ? u.customerNo : (session && session.viewAs) || "";
+    const q = cust && u.role === "admin" ? `?customerNo=${encodeURIComponent(cust)}` : "";
+    const [cs, pl, os, inv, sh] = await Promise.all([this.api("GET", "/customers"), cust ? this.api("GET", "/pricelist" + q) : Promise.resolve({ group: "", lines: [] }), this.api("GET", "/orders" + q), this.api("GET", "/invoices" + q), cust ? this.api("GET", "/shipments" + q).catch(() => ({ bySo: {} })) : Promise.resolve({ bySo: {} })]);
     const addr = c => [c.addressLine1, c.addressLine2, c.city, c.state, c.postalCode].filter(Boolean).join(", ");
-    S.customers = cs.value.map(c => ({ no: c.number, name: c.displayName, priceGroup: "LIST", contact: c.displayName, email: c.email || "", phone: c.phoneNumber || "", billTo: addr(c), shipTo: addr(c), terms: "Per BC", location: "", active: !c.blocked || !String(c.blocked).trim() }));
-    S.items = its.value.map(i => ({ no: i.number, desc: i.displayName, cat: i.itemCategoryCode || "Other", pack: i.baseUnitOfMeasureCode || "", uom: i.baseUnitOfMeasureCode || "", caseQty: 1, blocked: false, inventory: i.inventory }));
-    S.priceLists = S.items.map(i => ({ group: "LIST", itemNo: i.no, unitPrice: (its.value.find(x => x.number === i.no) || {}).unitPrice || 0, minQty: 1, startDate: "" }));
+    S.customers = cs.value.map(c => ({ no: c.number, name: c.displayName, priceGroup: c.priceGroup || "", contact: c.displayName, email: c.email || "", phone: c.phoneNumber || "", billTo: addr(c), shipTo: addr(c), terms: "Per BC", location: "", active: !c.blocked || !String(c.blocked).trim() }));
+    // Catalogue = this customer's price list only (Customer Price Group).
+    S.items = pl.lines.map(l => ({ no: l.itemNo, desc: l.description, cat: l.category || "Other", pack: l.uom, uom: l.uom, caseQty: 1, blocked: false }));
+    S.priceLists = pl.lines.map(l => ({ group: pl.group || "NONE", itemNo: l.itemNo, unitPrice: l.unitPrice, minQty: l.minQty, startDate: "" }));
+    const custRec = S.customers.find(c => c.no === cust); if (custRec) custRec.priceGroup = pl.group || "NONE";
+    this.priceGroup = pl.group; this.bySo = sh.bySo || {};
+    const qbt = so => (this.bySo[so] || []).map(h => ({ qbtNo: h.shipmentNo, soNo: so, date: h.date, carrier: h.carrier, tracking: h.tracking, lines: h.lines }));
     const split = ext => { const m = /^(JSH\d{4,}|WEB-[0-9A-Za-z-]+)(?:\/(.*))?$/.exec(ext || ""); return m ? { portalNo: m[1], po: m[2] || "" } : { portalNo: "", po: ext || "" }; };
     const orders = os.value.map(o => {
       const x = split(o.externalDocumentNumber);
@@ -467,7 +473,7 @@ const Live = {
         portalNo: x.portalNo || o.number, notPortal: !x.portalNo, customerNo: o.customerNumber, createdBy: o.placedBy || "", createdAt: (o.orderDate || "") + "T00:00:00Z",
         header: { orderDate: o.orderDate, requestedDeliveryDate: o.requestedDeliveryDate, customerPO: x.po, contact: "", email: "", phone: "", shipTo: o.customerName || "", billTo: "", terms: "", location: "", priceGroup: "LIST", notes: "" },
         lines, bc: { soNo: o.number, status: o.bcStatus, reviewed: "", submittedAt: (o.orderDate || "") + "T00:00:00Z", releasedAt: "", reviewedAt: "" },
-        shipments: shipped.length ? [{ qbtNo: "—", soNo: o.number, date: "", lines: shipped.map(l => ({ itemNo: l.lineObjectNumber, lotNo: "lot via QBT API", qty: l.shippedQuantity })) }] : [],
+        shipments: qbt(o.number),
         invoice: null, bcTotal: o.totalAmountIncludingTax
       };
     });
@@ -478,7 +484,7 @@ const Live = {
       // Fully invoiced orders no longer exist in BC, so the invoice stands in for the order.
       const x = split(v.externalDocumentNumber);
       const lines = (v.lines || []).filter(l => l.lineType === "Item").map(l => ({ lineNo: l.sequence, itemNo: l.lineObjectNumber, desc: l.description, uom: l.unitOfMeasureCode, qty: l.quantity, unitPrice: l.unitPrice }));
-      orders.push({ portalNo: x.portalNo || v.number, notPortal: !x.portalNo, customerNo: v.customerNumber, createdBy: "", createdAt: (v.invoiceDate || "") + "T00:00:00Z", header: { orderDate: v.invoiceDate, requestedDeliveryDate: "", customerPO: x.po, contact: "", email: "", phone: "", shipTo: v.customerName || "", billTo: "", terms: "", location: "", priceGroup: "LIST", notes: "" }, lines, bc: { soNo: v.orderNumber || "—", status: "Released", reviewed: "", submittedAt: "", releasedAt: "", reviewedAt: "" }, shipments: [{ qbtNo: "—", soNo: v.orderNumber, date: v.invoiceDate, lines: lines.map(l => ({ itemNo: l.itemNo, lotNo: "lot via QBT API", qty: l.qty })) }], invoice: { ...invObj, portalNo: x.portalNo }, bcTotal: v.totalAmountIncludingTax });
+      orders.push({ portalNo: x.portalNo || v.number, notPortal: !x.portalNo, customerNo: v.customerNumber, createdBy: "", createdAt: (v.invoiceDate || "") + "T00:00:00Z", header: { orderDate: v.invoiceDate, requestedDeliveryDate: "", customerPO: x.po, contact: "", email: "", phone: "", shipTo: v.customerName || "", billTo: "", terms: "", location: "", priceGroup: "LIST", notes: "" }, lines, bc: { soNo: v.orderNumber || "—", status: "Released", reviewed: "", submittedAt: "", releasedAt: "", reviewedAt: "" }, shipments: qbt(v.orderNumber), invoice: { ...invObj, portalNo: x.portalNo }, bcTotal: v.totalAmountIncludingTax });
     });
     S.orders = orders;
     S.users = [{ id: "live", username: u.username, password: "", name: u.name, role: u.role, customerNo: u.customerNo, active: true }];
@@ -494,7 +500,7 @@ async function liveSignedIn() {
   try { await Live.load(); }
   catch (e) { $("#app").innerHTML = `<div style="display:grid;place-items:center;min-height:100vh;padding:20px"><div class="card" style="max-width:460px"><h2 style="font-size:20px">Couldn't load your data</h2><p class="muted">${esc(e.message)}</p><button class="btn primary" data-act="logout">Back to sign-in</button></div></div>`; return; }
   session = { userId: "live", token: Live.token, viewAs: session && session.viewAs || "" }; saveSession();
-  ui.itemGroup = "LIST"; render();
+  ui.itemGroup = Live.priceGroup || "NONE"; render();
 }
 
 /* ============ BC adapter (demo mock — same call shapes as the real API) ============ */
@@ -701,7 +707,7 @@ function confirmedView() {
 }
 function listView(st) {
   const list = myOrders().filter(o => stage(o) === st).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const rows = list.map((o, i) => { const sh = o.shipments[o.shipments.length - 1]; const t = totals(o.lines); return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * .03}s"><td class="mono"><b>${esc(pno(o))}</b></td><td class="mono">${esc(o.bc.soNo)}</td><td class="mono">${esc(sh.qbtNo)}</td><td>${dt(sh.date)}</td><td>${esc(o.header.customerPO || "—")}</td><td>${[...new Set(sh.lines.map(l => l.lotNo))].slice(0, 3).map(l => `<span class="lot">${esc(l)}</span>`).join("")}${sh.lines.length > 3 ? `<span class="faint">+${sh.lines.length - 3}</span>` : ""}</td><td class="r num">${money(t.total)}</td></tr>`; }).join("");
+  const rows = list.map((o, i) => { const sh = o.shipments[o.shipments.length - 1]; const t = totals(o.lines); return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * .03}s"><td class="mono"><b>${esc(pno(o))}</b></td><td class="mono">${esc(o.bc.soNo)}</td><td class="mono">${esc(sh.qbtNo)}${sh.tracking ? `<br><span class="faint" style="font-size:12px">${esc(sh.carrier || "")} ${esc(sh.tracking)}</span>` : ""}</td><td>${dt(sh.date)}</td><td>${esc(o.header.customerPO || "—")}</td><td>${[...new Set(sh.lines.map(l => l.lotNo))].slice(0, 3).map(l => `<span class="lot">${esc(l)}</span>`).join("")}${sh.lines.length > 3 ? `<span class="faint">+${sh.lines.length - 3}</span>` : ""}</td><td class="r num">${money(t.total)}</td></tr>`; }).join("");
   return `<div class="page-head"><div><button class="crumb" data-go="home">← Home</button><h1>Orders Shipped</h1><p class="muted" style="margin:4px 0 0">Shipped orders with the lot numbers and quantities that left the warehouse. Open an order to see lots line by line.</p></div></div>
   <section class="card">${list.length ? `<div class="tbl-wrap"><table><thead><tr><th>Portal order</th><th>BC order</th><th>Shipment</th><th>Shipped</th><th>Your PO</th><th>Lots</th><th class="r">Total inc GST</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty"><div class="big">🚚</div>No orders are in transit right now.</div>`}</section>`;
 }
@@ -759,6 +765,7 @@ function createView() {
 function catList(pl) {
   const q = ui.catSearch.trim().toLowerCase();
   const list = pl.filter(p => (ui.catCat === "All" || p.item.cat === ui.catCat) && (!q || (p.item.desc + " " + p.itemNo).toLowerCase().includes(q)));
+  if (!pl.length && Live.on) return `<div class="empty">Your price list isn't set up yet. Contact JSH to get ordering switched on.</div>`;
   if (!list.length) return `<div class="empty">No items match.</div>`;
   return list.map(p => { const inn = draft.lines.find(l => l.itemNo === p.itemNo); return `<div class="prod"><div class="sw" style="background:${CAT_COL[p.item.cat] || "#eee"}">${esc(p.item.cat.slice(0, 3).toUpperCase())}</div><div><b>${esc(p.item.desc)}</b><small class="mono">${esc(p.itemNo)}</small> <small>· ${esc(p.item.pack)} · min ${p.minQty}</small><div class="num" style="font-weight:800;margin-top:2px">${money(p.unitPrice)} <small>/ ${esc(p.item.uom)}</small></div></div><button class="add ${inn ? "in" : ""}" data-add="${esc(p.itemNo)}" aria-label="Add ${esc(p.item.desc)}">${inn ? "✓" : "+"}</button></div>`; }).join("");
 }
@@ -838,15 +845,15 @@ function openOrder(portalNo) {
     <div class="timeline">${["Submitted", "Confirmed", "Shipped", "Invoiced", "Paid"].map((l, k) => `<div class="tl ${k <= idx ? "done" : ""} ${k === idx && k < 4 ? "cur" : ""}"><div class="c">${k <= idx ? "✓" : k + 1}</div>${l}<small>${k <= idx && dates[k] ? dt(dates[k]) : ""}</small></div>`).join("")}</div>
     <div class="kv"><div><span>Portal order no.</span><b class="mono">${o.notPortal ? "Not placed in portal" : esc(o.portalNo)}</b></div><div><span>BC sales order no.</span><b class="mono">${esc(o.bc.soNo)}</b></div><div><span>Your PO</span><b>${esc(o.header.customerPO || "—")}</b></div>
       <div><span>BC status</span><b>${esc(o.bc.status || "—")}</b></div><div><span>Order reviewed</span><b>${Live.on ? "Custom API pending" : esc(o.bc.reviewed || "Not yet")}</b></div><div><span>Requested delivery</span><b>${dt(o.header.requestedDeliveryDate)}</b></div>
-      <div style="grid-column:span 2"><span>Ship to</span><b>${esc(o.header.shipTo)}</b></div><div><span>Placed by</span><b>${esc(o.createdBy)}</b></div>
+      <div style="grid-column:span 2"><span>Ship to</span><b>${esc(o.header.shipTo)}</b></div><div><span>Placed by</span><b>${esc(o.createdBy || "—")}</b></div>
       ${o.invoice ? `<div><span>Invoice</span><b class="mono">${esc(o.invoice.no)}</b></div><div><span>Due</span><b>${dt(o.invoice.dueDate)}</b></div><div><span>Balance</span><b class="num">${money(o.invoice.remaining)}</b></div>` : ""}</div>
     ${o.header.notes ? `<p class="muted" style="margin:12px 0 0"><b>Notes:</b> ${esc(o.header.notes)}</p>` : ""}
     <h3 style="font-size:16px;margin:22px 0 8px">Lines${sh.length ? " and shipped lots" : ""}</h3>
     <div class="card" style="padding:6px 8px"><div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Description</th><th class="r">Ordered</th>${sh.length ? '<th class="r">Shipped</th><th>Lot no. × qty</th>' : ""}<th class="r">Amount</th></tr></thead><tbody>
-      ${o.lines.map(l => { const ls = sh.filter(s => s.itemNo === l.itemNo); const q = ls.reduce((a, s) => a + s.qty, 0); return `<tr style="animation:none"><td class="mono">${esc(l.itemNo)}</td><td>${esc(l.desc)}</td><td class="r num">${l.qty}</td>${sh.length ? `<td class="r num" style="color:${q < l.qty ? "var(--s-sub)" : "inherit"}">${q}</td><td>${ls.map(s => `<span class="lot">${esc(s.lotNo)} × ${s.qty}</span>`).join("") || '<span class="faint">—</span>'}</td>` : ""}<td class="r num">${money(l.qty * l.unitPrice)}</td></tr>`; }).join("")}
+      ${o.lines.map(l => { const ls = sh.filter(s => s.itemNo === l.itemNo); const q = ls.reduce((a, s) => a + s.qty, 0); return `<tr style="animation:none"><td class="mono">${esc(l.itemNo)}</td><td>${esc(l.desc)}</td><td class="r num">${l.qty}</td>${sh.length ? `<td class="r num" style="color:${q < l.qty ? "var(--s-sub)" : "inherit"}">${q}</td><td>${ls.map(s => `<span class="lot" title="${s.expiry ? "Expires " + esc(dt(s.expiry)) : ""}">${esc(s.lotNo)} × ${s.qty}${s.expiry ? ` · exp ${esc(new Date(s.expiry).toLocaleDateString("en-AU", { month: "2-digit", year: "2-digit" }))}` : ""}</span>`).join("") || '<span class="faint">—</span>'}</td>` : ""}<td class="r num">${money(l.qty * l.unitPrice)}</td></tr>`; }).join("")}
     </tbody></table></div>
     <div class="totals num" style="padding:0 12px 10px"><div><span class="muted">Subtotal</span><span>${money(t.sub)}</span></div><div><span class="muted">GST</span><span>${money(t.gst)}</span></div><div class="grand"><span>Total</span><span>${money(t.total)}</span></div></div></div>
-    ${o.shipments.length ? `<p class="faint" style="font-size:13px;margin-top:8px">Shipment ${o.shipments.map(s => esc(s.qbtNo)).join(", ")} · from QBT, matched on item no.</p>` : ""}
+    ${o.shipments.length ? o.shipments.map(s => `<p class="faint" style="font-size:13px;margin-top:8px">Shipment <b>${esc(s.qbtNo)}</b>${s.date ? " · " + dt(s.date) : ""}${s.carrier ? " · " + esc(s.carrier) : ""}${s.tracking ? ` · tracking <b class="mono">${esc(s.tracking)}</b>` : ""}</p>`).join("") : ""}
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px">
       ${custView() && editable(o) && o.bc.status === "Open" ? `<button class="btn dark" data-edit="${esc(o.portalNo)}">Edit order</button>` : ""}
       ${custView() && !editable(o) && st === "submitted" ? `<span class="rule">${ICON.shield}Released in BC. Edits are locked.</span>` : ""}
@@ -924,13 +931,18 @@ function adminOrders() {
 }
 function adminCustomers() {
   const S = Store.state;
+  if (Live.on) return `<div class="page-head"><div><h1>Customers</h1><p class="muted" style="margin:4px 0 0">From Business Central. Set each customer's <b>Customer Price Group</b>: it decides which items they see and can order. The BC Invite button will fill this in automatically later.</p></div></div>
+  <section class="card"><div class="tbl-wrap"><table><thead><tr><th>No.</th><th>Name</th><th>Email</th><th>Price group</th><th></th></tr></thead><tbody>
+  ${S.customers.map(c => `<tr style="animation:none"><td class="mono"><b>${esc(c.no)}</b></td><td>${esc(c.name)}</td><td>${esc(c.email)}</td><td><input class="input" style="max-width:140px" maxlength="20" id="pg-${esc(c.no)}" value="${esc(c.priceGroup === "NONE" ? "" : c.priceGroup)}" placeholder="e.g. 30%" aria-label="Price group for ${esc(c.name)}"></td><td style="white-space:nowrap"><button class="btn sm" data-savepg="${esc(c.no)}">Save</button> <button class="link" data-viewas="${esc(c.no)}">Preview</button></td></tr>`).join("")}
+  </tbody></table></div><p class="faint" style="font-size:12px;margin:10px 0 0">Showing the first 200 customers.</p></section>`;
   return `<div class="page-head"><div><h1>Customers</h1><p class="muted" style="margin:4px 0 0">Read from BC (standard customers API). Customer Price Group decides which items each customer can see and order.</p></div></div>
   <section class="card"><div class="tbl-wrap"><table><thead><tr><th>No.</th><th>Name</th><th>Price group</th><th>Contact</th><th>Ship to</th><th>Terms</th><th class="r">Portal users</th><th class="r">Orders</th><th>Portal access</th><th></th></tr></thead><tbody>
   ${S.customers.map((c, i) => `<tr style="animation-delay:${i * .03}s"><td class="mono"><b>${esc(c.no)}</b></td><td>${esc(c.name)}</td><td><span class="pill st-confirmed">${esc(c.priceGroup)}</span></td><td>${esc(c.contact)}<br><span class="faint" style="font-size:12px">${esc(c.email)}</span></td><td style="max-width:240px">${esc(c.shipTo)}</td><td>${esc(c.terms)}</td><td class="r num">${S.users.filter(u => u.customerNo === c.no).length}</td><td class="r num">${S.orders.filter(o => o.customerNo === c.no).length}</td><td><button class="btn sm ${c.active ? "" : "danger"}" data-cact="${esc(c.no)}">${c.active ? "Enabled" : "Disabled"}</button></td><td><button class="link" data-viewas="${esc(c.no)}">Preview</button></td></tr>`).join("")}
   </tbody></table></div></section>`;
 }
 function adminItems() {
-  const S = Store.state; const groups = [...new Set(S.priceLists.map(p => p.group))];
+  const S = Store.state;
+  if (Live.on) return `<div class="page-head"><div><h1>Items &amp; price lists</h1><p class="muted" style="margin:4px 0 0">Price lists come from Business Central (salesPriceListLines), filtered by each customer's Customer Price Group. To see what a customer sees, use <b>Preview</b> on the Customers page.</p></div></div><section class="card"><div class="rule">${ICON.shield}<span>Customers can only see and order items on their own price list. The portal checks every line again when an order is submitted.</span></div></section>`; const groups = [...new Set(S.priceLists.map(p => p.group))];
   const pl = S.priceLists.filter(p => p.group === ui.itemGroup);
   return `<div class="page-head"><div><h1>Items &amp; price lists</h1><p class="muted" style="margin:4px 0 0">Price lists come from your custom BC API and are filtered on Customer Price Group.</p></div>
     <div class="switch">${groups.map(g => `<button class="${ui.itemGroup === g ? "on" : ""}" data-ig="${esc(g)}">${esc(g)}</button>`).join("")}</div></div>
@@ -1110,14 +1122,15 @@ document.addEventListener("click", e => {
   if (d.ustatus) { const [em, st] = d.ustatus.split("|"); t.disabled = true; Live.api("POST", "/users/status", { email: em, status: st }).then(() => { liveUsers = null; render(); toast(st === "disabled" ? "Access switched off" : "Access switched back on"); }).catch(e => { t.disabled = false; toast(e.message); }); return; }
   if (d.edit) { const o = S.orders.find(x => x.portalNo === d.edit); closeModal(); if (o && editable(o)) startDraft(o); else toast("This order is locked."); return; }
   if (d.sim) { const [a, p] = d.sim.split("|"); simulate(a, p); return; }
-  if (d.viewas) { session.viewAs = d.viewas; saveSession(); go("home"); return; }
+  if (d.savepg) { const no = d.savepg; const v = ($("#pg-" + CSS.escape(no)) || {}).value || ""; t.disabled = true; Live.api("POST", "/customers/pricegroup", { customerNo: no, priceGroup: v }).then(r => { t.disabled = false; const c = S.customers.find(x => x.no === no); if (c) c.priceGroup = r.priceGroup; toast(r.priceGroup ? `${no}: price group ${r.priceGroup}, ${r.items} items` : `${no}: price group cleared`); }).catch(e => { t.disabled = false; toast(e.message); }); return; }
+  if (d.viewas) { session.viewAs = d.viewas; saveSession(); if (Live.on) { route = { page: "home", sub: "" }; liveSignedIn(); } else go("home"); return; }
   if (d.cact) { const c = customer(d.cact); c.active = !c.active; log("admin", `Portal access ${c.active ? "enabled" : "disabled"} for ${c.no}`); Store.save(); render(); return; }
   if (d.iblock) { const it = S.items.find(x => x.no === d.iblock); it.blocked = !it.blocked; log("admin", `${it.no} ${it.blocked ? "hidden" : "shown"} in portal`); Store.save(); render(); return; }
   if (d.utog) { const u = S.users.find(x => x.id === d.utog); u.active = !u.active; log("admin", `User ${u.username} ${u.active ? "enabled" : "disabled"}`); Store.save(); render(); return; }
   if (d.ureset) { const u = S.users.find(x => x.id === d.ureset); u.password = genPw(); log("admin", `Password reset for ${u.username}`); Store.save(); openModal(`<h2 style="font-size:22px">Password reset</h2><div class="kv" style="grid-template-columns:1fr 1fr;margin-top:12px"><div><span>Username</span><b class="mono">${esc(u.username)}</b></div><div><span>New password</span><b class="mono">${esc(u.password)}</b></div></div><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-act="close-layer">Done</button></div>`); return; }
   switch (d.act) {
     case "logout": if (me()) log("auth", `${me().name} signed out`); Store.save(); Live.token = ""; session = null; saveSession(); draft = null; closeModal(); render(); break;
-    case "exit-viewas": session.viewAs = ""; saveSession(); draft = null; go("admin-overview"); break;
+    case "exit-viewas": session.viewAs = ""; saveSession(); draft = null; if (Live.on) { route = { page: "admin-overview", sub: "" }; liveSignedIn(); } else go("admin-overview"); break;
     case "close-layer": closeModal(); break;
     case "close-go": closeModal(); go(d.to); break;
     case "close-new": closeModal(); startDraft(); break;
@@ -1133,7 +1146,7 @@ document.addEventListener("click", e => {
   }
 });
 document.addEventListener("input", e => { if (e.target.id === "admSearch") { ui.search = e.target.value; clearTimeout(window.__s); window.__s = setTimeout(() => { render(); const el = $("#admSearch"); el.focus(); el.setSelectionRange(el.value.length, el.value.length); }, 250); } });
-document.addEventListener("change", e => { if (e.target.id === "viewAsSel" && e.target.value) { session.viewAs = e.target.value; saveSession(); go("home"); } });
+document.addEventListener("change", e => { if (e.target.id === "viewAsSel" && e.target.value) { session.viewAs = e.target.value; saveSession(); if (Live.on) { route = { page: "home", sub: "" }; liveSignedIn(); } else go("home"); } });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#layer").innerHTML && !$(".steps")) closeModal(); });
 
 

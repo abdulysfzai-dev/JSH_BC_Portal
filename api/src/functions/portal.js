@@ -4,6 +4,7 @@ const { app } = require("@azure/functions");
 const { bc, bcBinary, getToken, config, lit } = require("../lib/bc");
 const store = require("../lib/store");
 const mail = require("../lib/mail");
+const { priceListFor } = require("./catalog");
 const { json, handler, currentUser, scopeCustomer, siteUrl } = require("../lib/http");
 
 const pick = (o, keys) => Object.fromEntries(keys.map(k => [k, o[k]]));
@@ -58,10 +59,12 @@ app.http("customers", {
     const fields = "number,displayName,email,phoneNumber,addressLine1,addressLine2,city,state,postalCode,paymentTermsId,blocked";
     if (user.role === "admin") {
       const r = await cached("customers:all", 300e3, () => bc("GET", `/customers?$select=${fields}&$orderby=number&$top=200`));
-      return json(200, { value: r.value });
+      const st = await store.getCustomerSettings().catch(() => ({}));
+      return json(200, { value: r.value.map(c => ({ ...c, priceGroup: (st[c.number] || {}).priceGroup || "" })) });
     }
     const r = await cached("customers:" + user.customerNo, 300e3, () => bc("GET", `/customers?$filter=number eq ${lit(user.customerNo)}&$select=${fields}`));
-    return json(200, { value: r.value });
+    const st = await store.getCustomerSettings().catch(() => ({}));
+    return json(200, { value: r.value.map(c => ({ ...c, priceGroup: (st[c.number] || {}).priceGroup || "" })) });
   })
 });
 
@@ -130,12 +133,12 @@ app.http("orders-create", {
     // Interim: the customer PO rides along in External Document No. until "Your Reference" is available through the custom API.
     const po = String((b.header && b.header.customerPO) || "").replace(/[^\w\-\/ .]/g, "").slice(0, 25);
 
-    // Every item must exist and not be blocked. (The custom price-list check slots in here.)
-    const nos = [...new Set(lines.map(l => String(l.itemNo)))];
-    const items = await bc("GET", `/items?$filter=${nos.map(n => `number eq ${lit(n)}`).join(" or ")}&$select=number,blocked`);
-    const ok = new Set(items.value.filter(i => !i.blocked).map(i => i.number));
-    const bad = nos.filter(n => !ok.has(n));
-    if (bad.length) return json(400, { error: `These items can't be ordered: ${bad.join(", ")}` });
+    // Every line must be on the customer's own price list (Customer Price Group), checked here, not trusted from the browser.
+    const pl = await priceListFor(customerNo);
+    if (!pl.group) return json(400, { error: "Your price list isn't set up in the portal yet. Contact JSH." });
+    const byItem = new Map(pl.lines.map(l => [l.itemNo, l]));
+    const bad = [...new Set(lines.map(l => String(l.itemNo)))].filter(n => !byItem.has(n));
+    if (bad.length) return json(400, { error: `These items aren't on your price list: ${bad.join(", ")}` });
 
     const h = b.header || {};
     // Take the next number and create the order inside one lock, so numbers never collide on this instance.
@@ -148,7 +151,7 @@ app.http("orders-create", {
       orderDate: new Date().toISOString().slice(0, 10),
       ...(h.requestedDeliveryDate && /^\d{4}-\d{2}-\d{2}$/.test(h.requestedDeliveryDate) ? { requestedDeliveryDate: h.requestedDeliveryDate } : {}),
       // Prices come from BC, never from the browser.
-      salesOrderLines: lines.map(l => ({ lineType: "Item", lineObjectNumber: String(l.itemNo), quantity: Number(l.quantity) }))
+      salesOrderLines: lines.map(l => ({ lineType: "Item", lineObjectNumber: String(l.itemNo), quantity: Number(l.quantity), ...(byItem.get(String(l.itemNo)).uom ? { unitOfMeasureCode: byItem.get(String(l.itemNo)).uom } : {}) }))
     };
       const created = await bc("POST", "/salesOrders?$expand=salesOrderLines", body);
       return { created, portalNo };
@@ -194,8 +197,4 @@ app.http("invoice-pdf", {
   })
 });
 
-// ---------- Shipments (QBT custom API) ----------
-app.http("shipments", {
-  route: "shipments", methods: ["GET"], authLevel: "anonymous",
-  handler: handler(async () => json(501, { error: "Waiting for the custom QBT API." }))
-});
+
