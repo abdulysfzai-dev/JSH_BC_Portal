@@ -1051,14 +1051,14 @@ function inviteModal(prefill) {
     <div class="field"><label for="ive">Email</label><input class="input" id="ive" type="email" required value="${esc(p.email || "")}" ${p.email ? "readonly" : ""}></div>
     <div class="field"><label for="ivn">Name (optional)</label><input class="input" id="ivn" maxlength="80" value="${esc(p.name || "")}"></div>
     <div class="field"><label for="ivr">Role</label><select class="input" id="ivr"><option value="customer" ${p.role !== "admin" ? "selected" : ""}>Customer</option><option value="admin" ${p.role === "admin" ? "selected" : ""}>JSH admin</option></select></div>
-    <div class="field" id="ivcWrap"><label for="ivc">Customer</label><select class="input" id="ivc">${S.customers.map(c => `<option value="${esc(c.no)}" ${p.customerNo === c.no ? "selected" : ""}>${esc(c.no)} · ${esc(c.name)}</option>`).join("")}</select></div>
+    <div class="field" id="ivcWrap"><label for="ivc">Customer no. (as in Business Central)</label><input class="input" id="ivc" list="ivcList" maxlength="20" autocomplete="off" value="${esc(p.customerNo || "")}" placeholder="e.g. GASLIGHT"><datalist id="ivcList">${S.customers.map(c => `<option value="${esc(c.no)}">${esc(c.name)}</option>`).join("")}</datalist></div>
     <div class="err" id="iverr"></div>
     <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" data-act="close-layer">Cancel</button><button class="btn primary" type="submit">Send invite</button></div></form>`);
   const sync = () => { $("#ivcWrap").style.display = $("#ivr").value === "admin" ? "none" : ""; }; $("#ivr").addEventListener("change", sync); sync();
   $("#ivForm").addEventListener("submit", async e => {
     e.preventDefault(); const btn = e.target.querySelector("[type=submit]"); btn.disabled = true;
     try {
-      const r = await Live.api("POST", "/invites", { email: $("#ive").value, name: $("#ivn").value, role: $("#ivr").value, customerNo: $("#ivr").value === "admin" ? "" : $("#ivc").value });
+      const r = await Live.api("POST", "/invites", { email: $("#ive").value, name: $("#ivn").value, role: $("#ivr").value, customerNo: $("#ivr").value === "admin" ? "" : $("#ivc").value.trim().toUpperCase() });
       liveUsers = null; render();
       openModal(`<h2 style="font-size:22px">Invite ${r.emailed ? "sent" : "ready"}</h2><p class="muted">${r.emailed ? `An invite email has gone to <b>${esc(r.email)}</b>.` : `Email isn't set up yet${r.mailError ? ` (${esc(r.mailError)})` : ""}, so copy this link and send it to <b>${esc(r.email)}</b> yourself.`}</p>
         <div class="field" style="margin-top:10px"><label for="ivlink">Invite link (works once, 7 days)</label><input class="input mono" id="ivlink" readonly value="${esc(r.link || "")}"></div>
