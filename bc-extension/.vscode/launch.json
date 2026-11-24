@@ -7,7 +7,7 @@
       "request": "launch",
       "environmentType": "Sandbox",
       "environmentName": "AUSandbox4Nov26",
-      "tenant": "PASTE-JSH-TENANT-ID-HERE",
+      "tenant": "f580439a-803c-4d25-988d-f90ebd5173d6",
       "startupObjectId": 99720,
       "startupObjectType": "Page",
       "breakOnError": "None",
