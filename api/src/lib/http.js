@@ -54,10 +54,14 @@ function tooMany(key, max, minutes) {
 }
 
 // The site's own address, for links in emails.
+// Static Web Apps passes the public address in x-ms-original-url; "host" is an internal one, so never use it.
 function siteUrl(request) {
   if (process.env.PORTAL_URL) return process.env.PORTAL_URL.replace(/\/$/, "");
-  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
-  return `https://${host}`;
+  const orig = request.headers.get("x-ms-original-url");
+  if (orig) { try { return new URL(orig).origin; } catch {} }
+  const fwd = (request.headers.get("x-forwarded-host") || "").split(",")[0].trim();
+  if (fwd && /azurestaticapps\.net$|\.com(\.au)?$/.test(fwd)) return `https://${fwd}`;
+  throw new Error("Can't work out the portal's address for email links. Set PORTAL_URL in Azure.");
 }
 
 module.exports = { json, handler, currentUser, scopeCustomer, tooMany, siteUrl, isBcCaller };
