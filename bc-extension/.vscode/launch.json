@@ -2,17 +2,17 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "JSH sandbox",
+      "name": "JSH sandbox (AUSandbox4Nov26)",
       "type": "al",
       "request": "launch",
       "environmentType": "Sandbox",
       "environmentName": "AUSandbox4Nov26",
-      "startupObjectId": 42,
+      "tenant": "PASTE-JSH-TENANT-ID-HERE",
+      "startupObjectId": 99720,
       "startupObjectType": "Page",
-      "breakOnError": "All",
+      "breakOnError": "None",
       "launchBrowser": true,
-      "enableLongRunningSqlStatements": true,
-      "enableSqlInformationDebugger": true
+      "schemaUpdateMode": "Synchronize"
     }
   ]
 }
