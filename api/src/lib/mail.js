@@ -52,6 +52,19 @@ const templates = {
     subject: "Reset your JSH Trade Portal password",
     html: frame("Reset your password", `<p>Hi${name ? " " + esc(name) : ""},</p><p>Someone (hopefully you) asked to reset the password for your JSH Trade Portal account.</p>${button(link, "Choose a new password")}<p style="color:#5b5670">This link works once and expires in 1 hour. If you didn't ask for this, you can ignore this email.</p>`)
   }),
+  orderConfirmed: ({ portalNo, soNo, customerName, po, lines, link }) => ({
+    subject: `Order ${portalNo} confirmed (${customerName})`,
+    html: frame(`Order ${portalNo} is confirmed`, `<p>Good news: JSH has reviewed and confirmed your order. We'll let you know when it ships.</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:14px;margin:12px 0">
+      <tr><td style="color:#8f8aa3;padding:4px 0">Portal order</td><td><b>${esc(portalNo)}</b></td></tr>
+      <tr><td style="color:#8f8aa3;padding:4px 0">JSH sales order</td><td><b>${esc(soNo)}</b></td></tr>
+      <tr><td style="color:#8f8aa3;padding:4px 0">Customer</td><td>${esc(customerName)}</td></tr>
+      ${po ? `<tr><td style="color:#8f8aa3;padding:4px 0">Your PO</td><td>${esc(po)}</td></tr>` : ""}</table>
+      <table role="presentation" cellpadding="6" cellspacing="0" style="width:100%;font-size:14px;border-collapse:collapse">
+      <tr style="background:#f6f3fb"><th align="left">Item</th><th align="left">Description</th><th align="right">Qty</th></tr>
+      ${lines.map(l => `<tr style="border-bottom:1px solid #ece7f5"><td>${esc(l.itemNo)}</td><td>${esc(l.description || "")}</td><td align="right">${esc(l.quantity)}</td></tr>`).join("")}
+      </table><p style="color:#5b5670">Your order can no longer be changed in the portal.</p>${button(link, "View in the portal")}`)
+  }),
   orderPlaced: ({ portalNo, soNo, customerName, placedBy, po, lines, total, link }) => ({
     subject: `Order ${portalNo} received (${customerName})`,
     html: frame(`Order ${portalNo} received`, `<p>Thanks, we've received your order. JSH will review and confirm it shortly.</p>

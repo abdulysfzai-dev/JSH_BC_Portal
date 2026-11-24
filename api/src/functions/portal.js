@@ -232,3 +232,31 @@ app.http("invoice-pdf", {
 });
 
 
+
+// ---------- Order confirmed: BC's job queue calls this; the portal checks BC itself, then emails once ----------
+app.http("notify-confirmed", {
+  route: "notify/confirmed", methods: ["POST"], authLevel: "anonymous",
+  handler: handler(async (request, ctx) => {
+    const b = await request.json().catch(() => ({}));
+    const soNo = String(b.orderNumber || "").slice(0, 20);
+    if (!soNo) return json(400, { error: "Missing orderNumber." });
+    if (await store.wasNotified("confirmed", soNo)) return json(200, { ok: true, message: "Already sent" });
+    // Don't trust the caller: read the order from BC and apply the rule here.
+    const r = await bc("GET", `/portalSalesOrders?$filter=number eq ${lit(soNo)}&$expand=portalSalesOrderLines`, null, { custom: "portal" });
+    const o = r.value[0];
+    if (!o) return json(404, { error: `Order ${soNo} not found.` });
+    if (o.status !== "Released" || o.orderReviewed !== "Reviewed") return json(409, { error: `Order ${soNo} isn't confirmed yet (status ${o.status}, reviewed '${o.orderReviewed}').` });
+    const portalNo = (/^(JSH\d{4,})/.exec(o.externalDocumentNumber || "") || [])[1];
+    if (!portalNo) return json(200, { ok: true, message: "Not a portal order, no email" });
+    const log = await store.orderLog(o.customerNumber).catch(() => ({}));
+    const placer = log[portalNo] || {};
+    const t = mail.templates.orderConfirmed({ portalNo, soNo, customerName: o.customerName || o.customerNumber, po: o.yourReference, lines: (o.portalSalesOrderLines || []).map(l => ({ itemNo: l.itemNumber, description: l.description, quantity: l.quantity })), link: siteUrl(request) });
+    const to = placer.email || mail.staff()[0];
+    if (!to) return json(500, { error: "No one to email: no placed-by email and NOTIFY_STAFF is empty." });
+    const sent = await mail.send({ to, cc: mail.staff(), ...t });
+    if (!sent.sent) return json(503, { error: "Email isn't set up (MAIL_SENDER)." });
+    await store.markNotified("confirmed", soNo, { portalNo, to });
+    ctx.log(`Confirmation sent for ${soNo} (${portalNo}) to ${to}`);
+    return json(200, { ok: true, message: `Confirmation sent to ${to}` });
+  }, { role: "admin", allowBc: true })
+});

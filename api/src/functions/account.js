@@ -121,6 +121,8 @@ app.http("invite", {
     if (!u) u = { email, name: clean(b.name, 80), phone: clean(b.phone, 30), role, customerNo, status: "invited", invitedBy: user.name, createdAt: new Date().toISOString() };
     else { u.role = role; u.customerNo = customerNo; if (u.status === "disabled") u.status = u.hash ? "active" : "invited"; if (!u.name && b.name) u.name = clean(b.name, 80); u.invitedBy = user.name; }
     await store.saveUser(u);
+    // BC's Invite button sends the customer's Customer Price Group: keep the portal's mapping in step.
+    if (role === "customer" && b.priceGroup !== undefined && String(b.priceGroup).trim()) await store.setCustomerPriceGroup(customerNo, clean(b.priceGroup, 20));
     const token = await store.createToken("invite", email, 24 * 7); // re-inviting cancels any earlier link
     const link = `${siteUrl(request)}/account.html?invite=${token}`;
     let emailed = false, mailError = "";

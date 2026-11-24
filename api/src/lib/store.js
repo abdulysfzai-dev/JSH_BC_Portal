@@ -82,4 +82,12 @@ async function setCustomerPriceGroup(customerNo, priceGroup) {
   await t.upsertEntity({ partitionKey: "customer", rowKey: String(customerNo), priceGroup: String(priceGroup || "") }, "Merge");
 }
 
-module.exports = { getCustomerSettings, setCustomerPriceGroup, enabled, getUser, saveUser, listUsers, createToken, readToken, useToken, logOrder, orderLog, keyOf };
+// ---------- confirmation emails already sent (once per sales order) ----------
+async function wasNotified(kind, soNo) {
+  try { await (await table("PortalNotified")).getEntity(kind, String(soNo)); return true; } catch (e) { if (e.statusCode === 404) return false; throw e; }
+}
+async function markNotified(kind, soNo, info) {
+  await (await table("PortalNotified")).upsertEntity({ partitionKey: kind, rowKey: String(soNo), at: new Date().toISOString(), ...info }, "Replace");
+}
+
+module.exports = { wasNotified, markNotified, getCustomerSettings, setCustomerPriceGroup, enabled, getUser, saveUser, listUsers, createToken, readToken, useToken, logOrder, orderLog, keyOf };
