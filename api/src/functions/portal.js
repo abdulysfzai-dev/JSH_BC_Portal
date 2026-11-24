@@ -57,6 +57,12 @@ app.http("customers", {
   route: "customers", methods: ["GET"], authLevel: "anonymous",
   handler: handler(async (request, ctx, user) => {
     const fields = "number,displayName,email,phoneNumber,addressLine1,addressLine2,city,state,postalCode,paymentTermsId,blocked";
+    if (user.role === "admin" && request.query.get("q")) {
+      const q = String(request.query.get("q")).slice(0, 40);
+      const r = await bc("GET", `/customers?$filter=startswith(number,${lit(q.toUpperCase())}) or contains(displayName,${lit(q)})&$select=${fields}&$orderby=number&$top=50`);
+      const st = await store.getCustomerSettings().catch(() => ({}));
+      return json(200, { value: r.value.map(c => ({ ...c, priceGroup: (st[c.number] || {}).priceGroup || "" })) });
+    }
     if (user.role === "admin") {
       const r = await cached("customers:all", 300e3, () => bc("GET", `/customers?$select=${fields}&$orderby=number&$top=200`));
       const st = await store.getCustomerSettings().catch(() => ({}));

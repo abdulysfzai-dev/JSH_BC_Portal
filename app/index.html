@@ -461,7 +461,9 @@ const Live = {
     // Catalogue = this customer's price list only (Customer Price Group).
     S.items = pl.lines.map(l => ({ no: l.itemNo, desc: l.description, cat: l.category || "Other", pack: l.uom, uom: l.uom, caseQty: 1, blocked: false }));
     S.priceLists = pl.lines.map(l => ({ group: pl.group || "NONE", itemNo: l.itemNo, unitPrice: l.unitPrice, minQty: l.minQty, startDate: "" }));
-    const custRec = S.customers.find(c => c.no === cust); if (custRec) custRec.priceGroup = pl.group || "NONE";
+    let custRec = S.customers.find(c => c.no === cust);
+    if (!custRec && cust && u.role === "admin") { const r = await this.api("GET", "/customers?q=" + encodeURIComponent(cust)); const c = r.value.find(x => x.number === cust); if (c) { custRec = { no: c.number, name: c.displayName, priceGroup: "", contact: c.displayName, email: c.email || "", phone: c.phoneNumber || "", billTo: addr(c), shipTo: addr(c), terms: "Per BC", location: "", active: true }; S.customers.push(custRec); } }
+    if (custRec) custRec.priceGroup = pl.group || "NONE";
     this.priceGroup = pl.group; this.bySo = sh.bySo || {};
     const qbt = so => (this.bySo[so] || []).map(h => ({ qbtNo: h.shipmentNo, soNo: so, date: h.date, carrier: h.carrier, tracking: h.tracking, lines: h.lines }));
     const split = ext => { const m = /^(JSH\d{4,}|WEB-[0-9A-Za-z-]+)(?:\/(.*))?$/.exec(ext || ""); return m ? { portalNo: m[1], po: m[2] || "" } : { portalNo: "", po: ext || "" }; };
@@ -932,9 +934,10 @@ function adminOrders() {
 function adminCustomers() {
   const S = Store.state;
   if (Live.on) return `<div class="page-head"><div><h1>Customers</h1><p class="muted" style="margin:4px 0 0">From Business Central. Set each customer's <b>Customer Price Group</b>: it decides which items they see and can order. The BC Invite button will fill this in automatically later.</p></div></div>
+  <div class="toolbar"><input class="input" id="custQ" placeholder="Search customer no. or name" value="${esc(ui.custQ || "")}" aria-label="Search customers"><button class="btn sm" data-act="cust-search">Search</button>${ui.custQ ? `<button class="link" data-act="cust-clear">Clear</button>` : ""}</div>
   <section class="card"><div class="tbl-wrap"><table><thead><tr><th>No.</th><th>Name</th><th>Email</th><th>Price group</th><th></th></tr></thead><tbody>
-  ${S.customers.map(c => `<tr style="animation:none"><td class="mono"><b>${esc(c.no)}</b></td><td>${esc(c.name)}</td><td>${esc(c.email)}</td><td><input class="input" style="max-width:140px" maxlength="20" id="pg-${esc(c.no)}" value="${esc(c.priceGroup === "NONE" ? "" : c.priceGroup)}" placeholder="e.g. 30%" aria-label="Price group for ${esc(c.name)}"></td><td style="white-space:nowrap"><button class="btn sm" data-savepg="${esc(c.no)}">Save</button> <button class="link" data-viewas="${esc(c.no)}">Preview</button></td></tr>`).join("")}
-  </tbody></table></div><p class="faint" style="font-size:12px;margin:10px 0 0">Showing the first 200 customers.</p></section>`;
+  ${(ui.custResults || S.customers).map(c => `<tr style="animation:none"><td class="mono"><b>${esc(c.no)}</b></td><td>${esc(c.name)}</td><td>${esc(c.email)}</td><td><input class="input" style="max-width:140px" maxlength="20" id="pg-${esc(c.no)}" value="${esc(c.priceGroup === "NONE" ? "" : c.priceGroup)}" placeholder="e.g. 30%" aria-label="Price group for ${esc(c.name)}"></td><td style="white-space:nowrap"><button class="btn sm" data-savepg="${esc(c.no)}">Save</button> <button class="link" data-viewas="${esc(c.no)}">Preview</button></td></tr>`).join("")}
+  </tbody></table></div><p class="faint" style="font-size:12px;margin:10px 0 0">${ui.custResults ? `${ui.custResults.length} found` : "Showing the first 200 customers. Search to find others."}</p></section>`;
   return `<div class="page-head"><div><h1>Customers</h1><p class="muted" style="margin:4px 0 0">Read from BC (standard customers API). Customer Price Group decides which items each customer can see and order.</p></div></div>
   <section class="card"><div class="tbl-wrap"><table><thead><tr><th>No.</th><th>Name</th><th>Price group</th><th>Contact</th><th>Ship to</th><th>Terms</th><th class="r">Portal users</th><th class="r">Orders</th><th>Portal access</th><th></th></tr></thead><tbody>
   ${S.customers.map((c, i) => `<tr style="animation-delay:${i * .03}s"><td class="mono"><b>${esc(c.no)}</b></td><td>${esc(c.name)}</td><td><span class="pill st-confirmed">${esc(c.priceGroup)}</span></td><td>${esc(c.contact)}<br><span class="faint" style="font-size:12px">${esc(c.email)}</span></td><td style="max-width:240px">${esc(c.shipTo)}</td><td>${esc(c.terms)}</td><td class="r num">${S.users.filter(u => u.customerNo === c.no).length}</td><td class="r num">${S.orders.filter(o => o.customerNo === c.no).length}</td><td><button class="btn sm ${c.active ? "" : "danger"}" data-cact="${esc(c.no)}">${c.active ? "Enabled" : "Disabled"}</button></td><td><button class="link" data-viewas="${esc(c.no)}">Preview</button></td></tr>`).join("")}
@@ -1139,6 +1142,8 @@ document.addEventListener("click", e => {
     case "sync": { const b = t; b.disabled = true; b.querySelector("svg").animate([{ transform: "rotate(0)" }, { transform: "rotate(360deg)" }], { duration: 700, iterations: 2 }); Promise.resolve(BC.refresh(activeCustomerNo())).then(() => { Store.save(); setTimeout(() => { render(); toast("Status refreshed from Business Central"); }, reduced ? 0 : 900); }); break; }
     case "add-user": userModal(); break;
     case "invite-user": inviteModal(); break;
+    case "cust-search": { const q = ($("#custQ") || {}).value || ""; ui.custQ = q; if (!q.trim()) { ui.custResults = null; render(); break; } Live.api("GET", "/customers?q=" + encodeURIComponent(q.trim())).then(r => { ui.custResults = r.value.map(c => ({ no: c.number, name: c.displayName, email: c.email || "", priceGroup: c.priceGroup || "" })); render(); }).catch(e => toast(e.message)); break; }
+    case "cust-clear": ui.custQ = ""; ui.custResults = null; render(); break;
     case "forgot": forgotModal(); break;
     case "copy-link": { const el = $("#ivlink"); el.select(); navigator.clipboard.writeText(el.value).then(() => toast("Link copied")).catch(() => toast("Select the link and copy it")); break; }
     case "reset-orders": resetModal("orders"); break;
@@ -1147,6 +1152,7 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("input", e => { if (e.target.id === "admSearch") { ui.search = e.target.value; clearTimeout(window.__s); window.__s = setTimeout(() => { render(); const el = $("#admSearch"); el.focus(); el.setSelectionRange(el.value.length, el.value.length); }, 250); } });
 document.addEventListener("change", e => { if (e.target.id === "viewAsSel" && e.target.value) { session.viewAs = e.target.value; saveSession(); if (Live.on) { route = { page: "home", sub: "" }; liveSignedIn(); } else go("home"); } });
+document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "custQ") { e.preventDefault(); const b = document.querySelector('[data-act="cust-search"]'); if (b) b.click(); } });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#layer").innerHTML && !$(".steps")) closeModal(); });
 
 
