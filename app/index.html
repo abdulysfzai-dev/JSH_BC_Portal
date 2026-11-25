@@ -782,6 +782,7 @@ function homeView() {
   const recent = [...os].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
   const first = (isAdmin() ? c.contact : u.name).split(" ")[0];
   const series = monthSeries(os, 6); const month = series[series.length - 1];
+  const inv = invoiceSeries(os, 6); const invMonth = inv[inv.length - 1];
   const kpi = (goTo, dot, label, value, sub, attn) => `<button class="kpi-card ${attn ? "attn" : ""}" data-go="${goTo}"><span class="kpi-label"><i style="background:${dot}"></i>${label}</span><b class="num">${value}</b><span class="kpi-sub">${sub}</span><span class="kpi-go" aria-hidden="true">→</span></button>`;
   return `<div class="dash">
     <section class="dash-head">
@@ -797,8 +798,8 @@ function homeView() {
     </section>
     <section class="month-row">
       ${kpi("all", "var(--ink)", "Total orders this month", month.count, monthLabel(0))}
-      ${kpi("all", "var(--ink)", "Order value this month", money(month.value), "Inc GST")}
-      <div class="card trend"><div class="trend-head"><b>Order value, last 6 months</b><span class="faint" style="font-size:12px">bars: $ · dots: orders</span></div>${trendChart(series)}</div>
+      ${kpi("topay", "var(--ink)", "Total invoice amount this month", money(invMonth.value), `${invMonth.count} invoice${invMonth.count === 1 ? "" : "s"} · inc GST`)}
+      <div class="card trend"><div class="trend-head"><b>Invoiced, last 6 months</b><span class="faint" style="font-size:12px">bars: $ invoiced · dots: invoices</span></div>${trendChart(inv)}</div>
     </section>
   </div>`;
 }
@@ -814,18 +815,29 @@ function monthSeries(os, n) {
   }
   return out;
 }
+// Invoiced amounts by invoice date (posted invoices only).
+function invoiceSeries(os, n) {
+  const now = new Date(); const out = [];
+  const invs = os.filter(o => o.invoice && o.invoice.date);
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1); const key = d.getFullYear() + "-" + d.getMonth();
+    const inMonth = invs.filter(o => { const c = new Date(o.invoice.date); return !isNaN(c) && c.getFullYear() + "-" + c.getMonth() === key; });
+    out.push({ label: d.toLocaleDateString("en-AU", { month: "short" }), count: inMonth.length, value: inMonth.reduce((a, o) => a + Number(o.invoice.amount || 0), 0) });
+  }
+  return out;
+}
 function trendChart(series) {
   const W = 560, H = 180, pad = { l: 8, r: 8, t: 22, b: 26 };
   const maxV = Math.max(1, ...series.map(s => s.value)), maxC = Math.max(1, ...series.map(s => s.count));
   const bw = (W - pad.l - pad.r) / series.length; const ih = H - pad.t - pad.b;
   const short = v => v >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "m" : v >= 1e3 ? "$" + (v / 1e3).toFixed(1) + "k" : "$" + Math.round(v);
   const pts = series.map((s, i) => [pad.l + bw * i + bw / 2, pad.t + ih - (s.count / maxC) * ih * .9]);
-  return `<svg class="trend-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Order value and number of orders for the last ${series.length} months">
+  return `<svg class="trend-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Amount invoiced and number of invoices for the last ${series.length} months">
     <line x1="${pad.l}" x2="${W - pad.r}" y1="${pad.t + ih}" y2="${pad.t + ih}" stroke="var(--line)"/>
     ${series.map((s, i) => { const h = Math.max(2, (s.value / maxV) * ih * .9); const x = pad.l + bw * i + bw * .22, w = bw * .56, y = pad.t + ih - h; const cur = i === series.length - 1;
-      return `<g><title>${s.label}: ${money(s.value)}, ${s.count} order${s.count === 1 ? "" : "s"}</title><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${cur ? "#111" : "#d9d4e2"}" class="bar" style="animation-delay:${i * .07}s"/><text x="${x + w / 2}" y="${y - 6}" text-anchor="middle" class="tv">${s.value ? short(s.value) : ""}</text><text x="${x + w / 2}" y="${H - 8}" text-anchor="middle" class="tl ${cur ? "cur" : ""}">${s.label}</text></g>`; }).join("")}
+      return `<g><title>${s.label}: ${money(s.value)}, ${s.count} invoice${s.count === 1 ? "" : "s"}</title><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${cur ? "#111" : "#d9d4e2"}" class="bar" style="animation-delay:${i * .07}s"/><text x="${x + w / 2}" y="${y - 6}" text-anchor="middle" class="tv">${s.value ? short(s.value) : ""}</text><text x="${x + w / 2}" y="${H - 8}" text-anchor="middle" class="tl ${cur ? "cur" : ""}">${s.label}</text></g>`; }).join("")}
     <polyline points="${pts.map(p => p.join(",")).join(" ")}" fill="none" stroke="var(--s-conf)" stroke-width="1.6" stroke-dasharray="4 4"/>
-    ${pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#fff" stroke="var(--s-conf)" stroke-width="2"><title>${series[i].count} orders</title></circle>`).join("")}
+    ${pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#fff" stroke="var(--s-conf)" stroke-width="2"><title>${series[i].count} invoice${series[i].count === 1 ? "" : "s"}</title></circle>`).join("")}
   </svg>`;
 }
 function allOrdersView() {
