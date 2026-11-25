@@ -343,24 +343,33 @@ td.r,th.r{text-align:right}
 .lines-card .empty .big{font-size:44px}
 
 
-/* Order submitted: flight from the warehouse */
-.flight-map{display:block;width:100%;max-width:340px;margin:-6px auto 0}
-.flight-map .land{fill:#f3f0f6;stroke:#1d1a2b;stroke-width:1.6;stroke-linejoin:round}
-.flight-map .route-line{fill:none;stroke:#111;stroke-width:2;stroke-dasharray:4 6;stroke-linecap:round;animation:routein 2.2s ease-out both}
-@keyframes routein{from{stroke-dashoffset:300;opacity:0}to{stroke-dashoffset:0;opacity:.55}}
-.flight-map .fplane path{fill:#111}
-.flight-map .wh{fill:#111}
-.flight-map .dest{fill:var(--s-paid);opacity:0;animation:fadein .3s 2s forwards}
-.flight-map .dest-pulse{fill:none;stroke:var(--s-paid);stroke-width:2;opacity:0;transform-box:fill-box;transform-origin:center;animation:landpulse 1.4s 2.1s ease-out infinite}
-@keyframes landpulse{0%{opacity:.7;transform:scale(1)}100%{opacity:0;transform:scale(4)}}
-@keyframes fadein{to{opacity:1}}
-.flight-map .lbl{font:700 15px var(--body);fill:#1d1a2b}
+/* Order submitted: order travels down the wire to JSH */
+.send-map{display:block;width:100%;max-width:384px;margin:0 auto}
+.send-map .pc{fill:#111}.send-map .pc .scr{fill:#f3f0f6}
+.send-map .wire{stroke:#d9d6e2;stroke-width:3;stroke-linecap:round}
+.send-map .wire-flow{stroke:#111;stroke-width:3;stroke-linecap:round;stroke-dasharray:6 10;animation:wireflow .6s linear infinite,fadeout .4s 1.6s forwards}
+@keyframes wireflow{to{stroke-dashoffset:-16}}
+@keyframes fadeout{to{opacity:.15}}
+.send-map .bldg{fill:#fff;stroke:#111;stroke-width:2;stroke-linejoin:round}
+.send-map .roof{fill:#111}.send-map .door{fill:#111}
+.send-map .win{fill:#ece9f3;stroke:none;animation:winon .35s ease-out forwards}
+@keyframes winon{to{fill:var(--s-paid)}}
+.send-map .rack{fill:#111;stroke:none}.send-map .rack-line{stroke:#555;stroke-width:1.5}
+.send-map .led{fill:#444;stroke:none;animation:led .5s 1.6s steps(2) 4 forwards}
+@keyframes led{0%{fill:#444}50%,100%{fill:#3ee08f}}
+.send-map .ring{fill:none;stroke:var(--s-paid);stroke-width:2;opacity:0;transform-box:fill-box;transform-origin:center;animation:landpulse 1.3s 1.6s ease-out 2}
+@keyframes landpulse{0%{opacity:.7;transform:scale(.8)}100%{opacity:0;transform:scale(1.5)}}
+.send-map .pkt{fill:#fff;stroke:#111;stroke-width:1.6;stroke-linejoin:round;animation:pkt 1.5s cubic-bezier(.45,0,.25,1) forwards}
+@keyframes pkt{0%{transform:translate(100px,64px) scale(.6);opacity:0}12%{opacity:1;transform:translate(110px,64px) scale(1)}88%{opacity:1;transform:translate(240px,64px) scale(1)}100%{opacity:0;transform:translate(262px,64px) scale(.4)}}
+.send-map .bit{fill:#111;opacity:0;animation:bit 1.3s linear forwards}
+@keyframes bit{0%{transform:translate(104px,64px);opacity:0}10%{opacity:.8}90%{opacity:.8}100%{transform:translate(250px,64px);opacity:0}}
+.send-map .lbl{font:700 12px var(--body);fill:#1d1a2b;stroke:none}
 .flight-cap{font-size:13px;font-weight:700;color:var(--ink-2);margin:2px 0 8px;animation:rise .5s .2s both}
-.flight .success-check{animation:rise .4s 2.1s both}
-.flight .success-check circle{animation-delay:2.1s}
-.flight .success-check path{animation-delay:2.6s}
-.flight h2,.flight p,.flight .link-pair,.flight .faint,.flight > div:last-child{animation:rise .5s 2.2s both}
-@media (prefers-reduced-motion:reduce){.flight *{animation:none!important;opacity:1!important}}
+.flight .success-check{animation:rise .4s 1.7s both}
+.flight .success-check circle{animation-delay:1.7s}
+.flight .success-check path{animation-delay:2.2s}
+.flight h2,.flight p,.flight .link-pair,.flight .faint,.flight > div:last-child{animation:rise .5s 1.8s both}
+@media (prefers-reduced-motion:reduce){.flight *{animation:none!important;opacity:1!important}.send-map .pkt,.send-map .bit,.send-map .ring{display:none}.send-map .win{fill:var(--s-paid)}}
 
 @media (max-width:1100px){.month-row{grid-template-columns:1fr 1fr}.month-row .trend{grid-column:1/-1}}
 @media (max-width:420px){.month-row{grid-template-columns:1fr}}
@@ -629,23 +638,21 @@ const AUS_TAS = "M379.1,389.7 L415.4,391.9 L415.4,406.2 L402.6,421.6 L391.9,420.
 const AUS_CITIES = { NSW: ["Sydney", 444, 315], VIC: ["Melbourne", 383, 358], QLD: ["Brisbane", 461, 244], WA: ["Perth", 97, 293], SA: ["Adelaide", 320, 326], TAS: ["Hobart", 406, 414], NT: ["Darwin", 244, 79], ACT: ["Canberra", 424, 330] };
 const WAREHOUSE_STATE = "NSW"; // JSH dispatches from Sydney
 function stateOf(address) { const m = /\b(NSW|VIC|QLD|WA|SA|TAS|NT|ACT)\b/i.exec(String(address || "")); return m ? m[1].toUpperCase() : ""; }
-// Order submitted: a plane flies from JSH's warehouse to the customer's city.
-function flightMap(shipTo) {
-  const [, wx, wy] = AUS_CITIES[WAREHOUSE_STATE];
-  const st = stateOf(shipTo); const dest = AUS_CITIES[st] || AUS_CITIES[WAREHOUSE_STATE];
-  let [name, dx, dy] = dest;
-  // Same city: a short local hop that loops out over the coast and back in.
-  const local = Math.hypot(dx - wx, dy - wy) < 20;
-  const d = local ? `M${wx},${wy} C${wx + 90},${wy - 90} ${wx + 110},${wy + 40} ${dx},${dy}` : `M${wx},${wy} Q${(wx + dx) / 2},${Math.min(wy, dy) - 120} ${dx},${dy}`;
-  const plane = "M-9,-1.2 L5,-1.2 Q9,0 5,1.2 L-9,1.2 Z M-1,-1.2 L-6,-8 L-3,-8 L4,-1.2 Z M-1,1.2 L-6,8 L-3,8 L4,1.2 Z M-8,-1.2 L-11,-4.5 L-9,-4.5 L-5,-1.2 Z M-8,1.2 L-11,4.5 L-9,4.5 L-5,1.2 Z";
-  return { city: name, svg: `<svg class="flight-map" viewBox="40 40 460 400" role="img" aria-label="A plane flying from JSH's warehouse in Sydney to ${esc(name)}">
-    <path d="${AUS_MAIN}" class="land"/><path d="${AUS_TAS}" class="land"/>
-    <path id="flightPath" d="${d}" class="route-line"/>
-    <circle cx="${wx}" cy="${wy}" r="5" class="wh"/><text x="${wx + 9}" y="${wy + 16}" class="lbl">JSH</text>
-    <circle cx="${dx}" cy="${dy}" r="5" class="dest"/><circle cx="${dx}" cy="${dy}" r="5" class="dest-pulse"/>
-    <text x="${dx - 8}" y="${dy - 12}" text-anchor="end" class="lbl">${esc(name)}</text>
-    <g class="fplane"><path d="${plane}" transform="scale(1.6)"/><animateMotion id="fm" dur="2.2s" begin="indefinite" fill="freeze" rotate="auto" keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines=".45 0 .25 1"><mpath href="#flightPath"/></animateMotion></g>
-  </svg>` };
+// Order submitted: the order travels down the wire from the customer to JSH's building / Business Central server.
+function sendAnim() {
+  const win = [[272, 46], [290, 46], [308, 46], [272, 62], [290, 62], [308, 62]].map(([x, y], i) => `<rect x="${x}" y="${y}" width="12" height="9" rx="1.5" class="win" style="animation-delay:${1.55 + i * .06}s"/>`).join("");
+  return `<svg class="send-map" viewBox="0 0 384 130" role="img" aria-label="Your order travelling electronically to JSH's Business Central server">
+    <g class="pc"><rect x="34" y="40" width="54" height="36" rx="4"/><rect x="40" y="46" width="42" height="24" rx="2" class="scr"/><path d="M24 80 H98 L92 88 H30 Z"/></g>
+    <text x="61" y="110" text-anchor="middle" class="lbl">Your order</text>
+    <path d="M104 64 H250" class="wire"/><path d="M104 64 H250" class="wire-flow"/>
+    <g class="bldg"><path d="M262 34 L295 18 L328 34 Z" class="roof"/><rect x="264" y="34" width="62" height="56" rx="2"/>${win}<rect x="287" y="76" width="16" height="14" rx="1.5" class="door"/>
+      <rect x="333" y="48" width="18" height="42" rx="2.5" class="rack"/><circle cx="338" cy="56" r="1.8" class="led"/><circle cx="338" cy="66" r="1.8" class="led" style="animation-delay:1.75s"/><circle cx="338" cy="76" r="1.8" class="led" style="animation-delay:1.9s"/>
+      <path d="M342 55 h6 M342 65 h6 M342 75 h6" class="rack-line"/></g>
+    <circle cx="295" cy="60" r="34" class="ring"/>
+    <text x="306" y="110" text-anchor="middle" class="lbl">JSH · Business Central</text>
+    <g class="pkt"><rect x="0" y="-7" width="20" height="14" rx="2"/><path d="M1 -6 L10 1 L19 -6"/></g>
+    <g class="bit" style="animation-delay:.15s"><circle r="2.4"/></g><g class="bit" style="animation-delay:.3s"><circle r="2.4"/></g>
+  </svg>`;
 }
 // Home "On the way" tile: tiny map, plane looping warehouse → customer while orders are in transit.
 function miniFlight(shipTo) {
@@ -1090,18 +1097,16 @@ async function submitOrder() {
   }
   await Store.save();
   const saved = draft; draft = null;
-  const fm = editing ? null : flightMap(saved.header.shipTo);
-  openModal(`<div style="text-align:center" class="${fm ? "flight" : ""}">${fm ? `${fm.svg}<div class="flight-cap">Order sent to JSH · delivering to ${esc(fm.city)}</div>` : ""}<svg class="success-check" viewBox="0 0 84 84"><circle cx="42" cy="42" r="38"/><path d="M26 43l11 11 21-23"/></svg>
+  const fm = !editing;
+  openModal(`<div style="text-align:center" class="${fm ? "flight" : ""}">${fm ? `${sendAnim()}<div class="flight-cap">Sent electronically · received by JSH in Business Central</div>` : ""}<svg class="success-check" viewBox="0 0 84 84"><circle cx="42" cy="42" r="38"/><path d="M26 43l11 11 21-23"/></svg>
     <h2 style="font-size:24px">${editing ? "Changes saved" : "Order submitted"}</h2>
     <p class="muted" style="margin:6px 0 0">${editing ? "Your sales order in Business Central has been updated." : "Your order is in Business Central and waiting for JSH to confirm it."}</p>
     <div class="link-pair"><span class="order-no">${esc(saved.portalNo)}</span><span aria-hidden="true">⇄</span><span class="order-no">${esc(saved.bc.soNo)}</span></div>
     <div class="faint" style="font-size:13px">Portal order no. ⇄ BC sales order no.</div>
     <div style="display:flex;gap:10px;justify-content:center;margin-top:20px;flex-wrap:wrap"><button class="btn ghost" data-act="close-go" data-to="confirmed">View my orders</button><button class="btn primary" data-act="close-new">Create another</button></div></div>`);
   if (!editing) {
-    // Start the flight now (SVG timing counts from page load, so it has to be started by hand), confetti when it lands.
-    const anim = document.getElementById("fm");
-    if (anim && !reduced && anim.beginElement) { anim.beginElement(); setTimeout(confetti, 2100); }
-    else { const m = document.querySelector(".flight-map"); if (m && m.pauseAnimations) { m.setCurrentTime && m.setCurrentTime(3); } confetti(); }
+    // CSS-driven: the packet lands on JSH's server at ~1.6s, confetti right after.
+    setTimeout(confetti, reduced ? 0 : 1900);
   }
   if (Live.on) BC.refresh();
 }
