@@ -143,6 +143,7 @@ button{cursor:pointer}
 /* Tables */
 .tbl-wrap{overflow-x:auto}
 table{width:100%;border-collapse:separate;border-spacing:0}
+th[data-arrow]::after{content:attr(data-arrow);color:var(--accent)}
 th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:12px;border-bottom:1px solid var(--line);vertical-align:middle}
 tbody tr{transition:background .15s}
@@ -565,7 +566,49 @@ function render() {
 }
 function afterRender() {
   document.querySelectorAll("[data-count]").forEach(el => countUp(el, Number(el.dataset.count), el.dataset.fmt));
+  enhanceTables();
   if (route.page === "create") bindCreate();
+}
+// Search box + click-to-sort headers on every list table (orders, shipped, invoices, admin lists).
+const tableState = {};
+function sortValue(td) {
+  const t = (td.innerText || "").trim();
+  const m = t.replace(/[$,\s]/g, "");
+  if (/^-?\d+(\.\d+)?$/.test(m)) return { n: parseFloat(m) };
+  if (/^\d{1,2} [A-Za-z]{3} \d{4}/.test(t)) { const d = Date.parse(t.slice(0, 11)); if (!isNaN(d)) return { n: d }; }
+  return { s: t.toLowerCase() };
+}
+function enhanceTables() {
+  if (route.page === "create") return;
+  document.querySelectorAll("main .card .tbl-wrap > table").forEach((table, idx) => {
+    const tbody = table.tBodies[0]; if (!tbody || tbody.rows.length < 2 || table.dataset.enh) return;
+    table.dataset.enh = "1";
+    const key = route.page + ":" + idx; const st = tableState[key] = tableState[key] || { q: "", col: -1, dir: 1 };
+    const wrap = table.parentElement;
+    const bar = document.createElement("div"); bar.className = "toolbar"; bar.style.margin = "0 0 10px";
+    bar.innerHTML = `<input class="input" type="search" placeholder="Search this list" aria-label="Search this list" style="max-width:280px"><span class="faint" style="font-size:13px"></span>`;
+    wrap.parentElement.insertBefore(bar, wrap);
+    const input = bar.querySelector("input"), count = bar.querySelector("span"); input.value = st.q;
+    const rows = [...tbody.rows];
+    const apply = () => {
+      const q = st.q.trim().toLowerCase(); let shown = 0;
+      rows.forEach(r => { const ok = !q || r.innerText.toLowerCase().includes(q); r.style.display = ok ? "" : "none"; if (ok) shown++; });
+      count.textContent = q ? `${shown} of ${rows.length}` : `${rows.length} rows`;
+      if (st.col >= 0) {
+        const sorted = [...rows].sort((a, b) => { const x = sortValue(a.cells[st.col] || a), y = sortValue(b.cells[st.col] || b); const r = x.n !== undefined && y.n !== undefined ? x.n - y.n : String(x.s ?? x.n).localeCompare(String(y.s ?? y.n)); return r * st.dir; });
+        sorted.forEach(r => tbody.appendChild(r));
+      }
+      [...table.tHead.rows[0].cells].forEach((th, i) => { th.dataset.arrow = i === st.col ? (st.dir > 0 ? " ▲" : " ▼") : ""; });
+    };
+    [...table.tHead.rows[0].cells].forEach((th, i) => {
+      if (!th.textContent.trim()) return;
+      th.style.cursor = "pointer"; th.title = "Sort"; th.tabIndex = 0;
+      const go = () => { st.dir = st.col === i ? -st.dir : 1; st.col = i; apply(); };
+      th.addEventListener("click", go); th.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+    });
+    input.addEventListener("input", () => { st.q = input.value; apply(); });
+    apply();
+  });
 }
 function countUp(el, to, fmt) {
   const f = v => fmt === "money" ? money(v) : Math.round(v).toLocaleString("en-AU");
