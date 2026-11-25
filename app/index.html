@@ -853,9 +853,10 @@ function openOrder(portalNo) {
     ${o.header.notes ? `<p class="muted" style="margin:12px 0 0"><b>Notes:</b> ${esc(o.header.notes)}</p>` : ""}
     <h3 style="font-size:16px;margin:22px 0 8px">Lines${sh.length ? " and shipped lots" : ""}</h3>
     <div class="card" style="padding:6px 8px"><div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Description</th><th class="r">Ordered</th>${sh.length ? '<th class="r">Shipped</th><th>Lot no. × qty</th>' : ""}<th class="r">Amount</th></tr></thead><tbody>
-      ${o.lines.map(l => { const ls = sh.filter(s => s.itemNo === l.itemNo); const q = ls.reduce((a, s) => a + s.qty, 0); return `<tr style="animation:none"><td class="mono">${esc(l.itemNo)}</td><td>${esc(l.desc)}</td><td class="r num">${l.qty}</td>${sh.length ? `<td class="r num" style="color:${q < l.qty ? "var(--s-sub)" : "inherit"}">${q}</td><td>${ls.map(s => `<span class="lot" title="${s.expiry ? "Expires " + esc(dt(s.expiry)) : ""}">${esc(s.lotNo)} × ${s.qty}${s.expiry ? ` · exp ${esc(new Date(s.expiry).toLocaleDateString("en-AU", { month: "2-digit", year: "2-digit" }))}` : ""}</span>`).join("") || '<span class="faint">—</span>'}</td>` : ""}<td class="r num">${money(l.qty * l.unitPrice)}</td></tr>`; }).join("")}
+      ${o.lines.map(l => { const ls = sh.filter(s => sameItem(s, l.itemNo)); const q = ls.reduce((a, s) => a + s.qty, 0); return `<tr style="animation:none"><td class="mono">${esc(l.itemNo)}</td><td>${esc(l.desc)}</td><td class="r num">${l.qty}</td>${sh.length ? `<td class="r num" style="color:${q < l.qty ? "var(--s-sub)" : "inherit"}">${q}</td><td>${ls.map(s => `<span class="lot" title="${s.expiry ? "Expires " + esc(dt(s.expiry)) : ""}">${esc(s.lotNo)} × ${s.qty}${s.expiry ? ` · exp ${esc(new Date(s.expiry).toLocaleDateString("en-AU", { month: "2-digit", year: "2-digit" }))}` : ""}</span>`).join("") || '<span class="faint">—</span>'}</td>` : ""}<td class="r num">${money(l.qty * l.unitPrice)}</td></tr>`; }).join("")}
     </tbody></table></div>
     <div class="totals num" style="padding:0 12px 10px"><div><span class="muted">Subtotal</span><span>${money(t.sub)}</span></div><div><span class="muted">GST</span><span>${money(t.gst)}</span></div><div class="grand"><span>Total</span><span>${money(t.total)}</span></div></div></div>
+    ${(() => { const extra = sh.filter(s => !o.lines.some(l => sameItem(s, l.itemNo))); return extra.length ? `<h3 style="font-size:15px;margin:18px 0 6px">Other shipped items</h3><p class="faint" style="font-size:13px;margin:0 0 6px">Shipped under the warehouse's item code, which didn't match a line on this order.</p><div class="card" style="padding:6px 8px"><div class="tbl-wrap"><table><thead><tr><th>Warehouse item</th><th>Lot</th><th class="r">Qty</th><th>Expiry</th></tr></thead><tbody>${extra.map(s => `<tr style="animation:none"><td class="mono">${esc(s.qbtItemNo || s.itemNo)}${s.gtin ? `<br><span class="faint" style="font-size:12px">GTIN ${esc(s.gtin)}</span>` : ""}</td><td><span class="lot">${esc(s.lotNo)}</span></td><td class="r num">${s.qty}</td><td>${s.expiry ? dt(s.expiry) : "—"}</td></tr>`).join("")}</tbody></table></div></div>` : ""; })()}
     ${o.shipments.length ? o.shipments.map(s => `<p class="faint" style="font-size:13px;margin-top:8px">Shipment <b>${esc(s.qbtNo)}</b>${s.date ? " · " + dt(s.date) : ""}${s.carrier ? " · " + esc(s.carrier) : ""}${s.tracking ? ` · tracking <b class="mono">${esc(s.tracking)}</b>` : ""}</p>`).join("") : ""}
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px">
       ${custView() && editable(o) && o.bc.status === "Open" ? `<button class="btn dark" data-edit="${esc(o.portalNo)}">Edit order</button>` : ""}
@@ -866,6 +867,10 @@ function openOrder(portalNo) {
     ${admin ? simPanel(o) : ""}
   </aside>`;
 }
+// A shipped lot belongs to an order line when the item codes match (ignoring case and spaces), either the BC item no.
+// worked out by the back end or the warehouse's own code.
+const normCode = v => String(v || "").trim().toUpperCase();
+function sameItem(s, itemNo) { const n = normCode(itemNo); return !!n && (normCode(s.itemNo) === n || normCode(s.qbtItemNo) === n); }
 function simPanel(o) {
   if (Store.state.settings.env !== "demo") return "";
   const st = stage(o);
