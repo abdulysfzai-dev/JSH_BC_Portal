@@ -275,6 +275,10 @@ td.r,th.r{text-align:right}
 .kpi-sub{font-size:12px;color:var(--ink-3);font-weight:600}
 .kpi-go{position:absolute;right:16px;top:14px;color:var(--ink-3);font-weight:700}
 .kpi-card:hover .kpi-go{color:var(--ink)}
+.kpi-card .mini-map{position:absolute;right:12px;bottom:8px;width:108px;height:auto;pointer-events:none}
+.mini-map .land{fill:#f1f0f5;stroke:var(--ink);stroke-width:3;stroke-linejoin:round}
+.mini-map .route-line{fill:none;stroke:var(--ink-3);stroke-width:3;stroke-dasharray:8 8}
+.mini-map .wh{fill:var(--ink)}.mini-map .dest{fill:var(--s-ship)}.mini-map .mplane{fill:var(--ink)}
 .notice{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:#fff5f7;border:1.5px solid var(--s-inv);color:#9b1c40;border-radius:14px;padding:12px 16px;font-size:14px}
 .notice span{margin-left:auto;font-weight:700}
 .card.plain table td{padding:10px 12px}
@@ -643,6 +647,20 @@ function flightMap(shipTo) {
     <g class="fplane"><path d="${plane}" transform="scale(1.6)"/><animateMotion id="fm" dur="2.2s" begin="indefinite" fill="freeze" rotate="auto" keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines=".45 0 .25 1"><mpath href="#flightPath"/></animateMotion></g>
   </svg>` };
 }
+// Home "On the way" tile: tiny map, plane looping warehouse → customer while orders are in transit.
+function miniFlight(shipTo) {
+  const [, wx, wy] = AUS_CITIES[WAREHOUSE_STATE];
+  const [, dx, dy] = AUS_CITIES[stateOf(shipTo)] || AUS_CITIES[WAREHOUSE_STATE];
+  const local = Math.hypot(dx - wx, dy - wy) < 20;
+  const d = local ? `M${wx},${wy} C${wx - 150},${wy - 140} ${wx - 190},${wy + 30} ${dx},${dy}` : `M${wx},${wy} Q${(wx + dx) / 2},${Math.min(wy, dy) - 110} ${dx},${dy}`;
+  const motion = reduced ? "" : `<animateMotion dur="3.2s" begin="0s" repeatCount="indefinite" rotate="auto"><mpath href="#miniPath"/></animateMotion>`;
+  return `<svg class="mini-map" viewBox="60 50 450 390" aria-hidden="true">
+    <path d="${AUS_MAIN}" class="land"/><path d="${AUS_TAS}" class="land"/>
+    <path id="miniPath" d="${d}" class="route-line"/>
+    <circle cx="${wx}" cy="${wy}" r="7" class="wh"/><circle cx="${dx}" cy="${dy}" r="7" class="dest"/>
+    <g class="mplane"${reduced ? ` transform="translate(${(wx + dx) / 2},${Math.min(wy, dy) - 40})"` : ""}><path d="M-9,-1.2 L5,-1.2 Q9,0 5,1.2 L-9,1.2 Z M-1,-1.2 L-6,-8 L-3,-8 L4,-1.2 Z M-1,1.2 L-6,8 L-3,8 L4,1.2 Z" transform="scale(2.6)"/>${motion}</g>
+  </svg>`;
+}
 function newPortalNo() { return "JSH…"; }
 function newDraftId() { const b = new Uint8Array(12); crypto.getRandomValues(b); return [...b].map(x => x.toString(16).padStart(2, "0")).join(""); }
 async function liveSignedIn() {
@@ -869,7 +887,7 @@ function homeView() {
     ${overdue.length ? `<button class="notice" data-go="topay"><b>${overdue.length} overdue invoice${overdue.length > 1 ? "s" : ""}</b> · ${money(overdueAmt)} past due <span>View →</span></button>` : ""}
     <section class="kpis-row">
       ${kpi("confirmed", "var(--s-sub)", "Awaiting confirmation", cnt("submitted"), `${cnt("confirmed")} confirmed`)}
-      ${kpi("shipped", "var(--s-ship)", "On the way", cnt("shipped"), "With lot numbers")}
+      ${kpi("shipped", "var(--s-ship)", "On the way", cnt("shipped"), "With lot numbers").replace('<span class="kpi-go"', cnt("shipped") ? miniFlight(c.shipTo) + '<span class="kpi-go"' : '<span class="kpi-go"')}
       ${kpi("topay", "var(--s-inv)", "To be paid", money(owing), `${cnt("invoiced")} invoice${cnt("invoiced") === 1 ? "" : "s"}`, overdue.length > 0)}
       ${kpi("paid", "var(--s-paid)", "Paid", cnt("paid"), "Payment history")}
     </section>
