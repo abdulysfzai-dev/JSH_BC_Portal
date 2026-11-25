@@ -912,15 +912,14 @@ function createView() {
       </section>
     </div>
     <aside class="card cat"><h3 style="font-size:17px">Your price list</h3><div class="faint" style="font-size:13px">${pl.length} items available to ${esc(c.name)}</div>
-      <input class="input" id="catSearch" placeholder="Search items" value="${esc(ui.catSearch)}" style="margin-top:12px" aria-label="Search items">
-      <div class="chips" style="margin-top:10px">${cats.map(k => `<button class="chip ${ui.catCat === k ? "on" : ""}" data-cat="${esc(k)}">${esc(k)}</button>`).join("")}</div>
+      <input class="input" id="catSearch" type="search" placeholder="Search by name or item no." value="${esc(ui.catSearch)}" style="margin-top:12px" aria-label="Search items">
       <div class="cat-list" id="catList">${catList(pl)}</div>
     </aside>
   </div>`;
 }
 function catList(pl) {
   const q = ui.catSearch.trim().toLowerCase();
-  const list = pl.filter(p => (ui.catCat === "All" || p.item.cat === ui.catCat) && (!q || (p.item.desc + " " + p.itemNo).toLowerCase().includes(q)));
+  const list = pl.filter(p => !q || (p.item.desc + " " + p.itemNo + " " + p.item.cat).toLowerCase().includes(q));
   if (!pl.length && Live.on) return `<div class="empty">Your price list isn't set up yet. Contact JSH to get ordering switched on.</div>`;
   if (!list.length) return `<div class="empty">No items match.</div>`;
   return list.map(p => { const inn = draft.lines.find(l => l.itemNo === p.itemNo); return `<div class="prod"><div class="sw" style="background:${CAT_COL[p.item.cat] || "#eee"}">${esc(p.item.cat.slice(0, 3).toUpperCase())}</div><div><b>${esc(p.item.desc)}</b><small class="mono">${esc(p.itemNo)}</small> <small>· ${esc(p.item.pack)} · min ${p.minQty}</small><div class="num" style="font-weight:800;margin-top:2px">${money(p.unitPrice)} <small>/ ${esc(p.item.uom)}</small></div></div><button class="add ${inn ? "in" : ""}" data-add="${esc(p.itemNo)}" aria-label="Add ${esc(p.item.desc)}">${inn ? "✓" : "+"}</button></div>`; }).join("");
