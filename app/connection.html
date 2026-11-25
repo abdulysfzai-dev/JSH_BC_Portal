@@ -47,6 +47,7 @@ async function check(token) {
   $("#out").innerHTML = `
     <div class="card"><h2 style="margin:0 0 8px;font-size:18px">Checks</h2><table>${checks}</table></div>
     <div class="card"><h2 style="margin:0 0 8px;font-size:18px">Settings</h2><p style="color:var(--muted);margin:0 0 8px">Secrets only show as set or not set.</p><table>${settings}</table></div>
+    <div class="card"><h2 style="margin:0 0 8px;font-size:18px">Look up an order (BC + QBT)</h2><form id="lk" class="row" style="grid-template-columns:1fr auto"><div><label for="lkno">SO or portal number</label><input id="lkno" required placeholder="e.g. JSH0002 or SO115682"></div><button type="submit">Look up</button></form><pre id="lkres" style="display:none"></pre></div>
     <div class="card"><h2 style="margin:0 0 8px;font-size:18px">Send a test email</h2><form id="mt" class="row" style="grid-template-columns:1fr auto"><div><label for="mto">Send to</label><input id="mto" type="email" required placeholder="you@example.com"></div><button type="submit">Send test</button></form><div id="mres" style="margin-top:10px;font-weight:600"></div></div>
     ${comps ? `<div class="card"><h2 style="margin:0 0 8px;font-size:18px">Companies in ${esc(h.settings.BC_ENVIRONMENT)}</h2><p style="color:var(--muted);margin:0 0 8px">Copy the ID of the company the portal should use into the BC_COMPANY_ID setting in Azure.</p><table><tr><th>Name</th><th>Display name</th><th>Company ID</th><th></th></tr>${comps}</table></div>` : ""}
     ${h.samples ? `<div class="card"><h2 style="margin:0 0 8px;font-size:18px">Sample data</h2><pre>${esc(JSON.stringify(h.samples, null, 2))}</pre></div>` : ""}`;
@@ -58,6 +59,11 @@ $("#f").addEventListener("submit", async e => {
   if (!r.ok) { $("#err").textContent = j.error || "Sign-in failed."; return; }
   if (j.user.role !== "admin") { $("#err").textContent = "This page needs an admin sign-in."; return; }
   $("#p").value = ""; window.__tok = j.token; check(j.token);
+});
+document.addEventListener("submit", async e => {
+  if (e.target.id !== "lk") return; e.preventDefault(); const p = $("#lkres"); p.style.display = "block"; p.textContent = "Looking up…";
+  const r = await fetch("/api/diag/order?no=" + encodeURIComponent($("#lkno").value), { headers: { "x-portal-token": window.__tok } });
+  const j = await r.json().catch(() => ({})); p.textContent = JSON.stringify(j, null, 2);
 });
 document.addEventListener("submit", async e => {
   if (e.target.id !== "mt") return; e.preventDefault(); const r = $("#mres"); r.textContent = "Sending…"; r.className = "";

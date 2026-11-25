@@ -10,9 +10,32 @@ async function cached(key, ms, fn) { const c = cache.get(key); if (c && Date.now
 
 // All items, slim, for descriptions and categories. JSH has many items, so page through them all.
 const allItems = () => cached("items:all", 15 * 60e3, async () => {
-  const list = await bcAll("/items?$select=number,displayName,itemCategoryCode,baseUnitOfMeasureCode,blocked");
+  const list = await bcAll("/items?$select=number,displayName,itemCategoryCode,baseUnitOfMeasureCode,blocked,gtin");
   return new Map(list.map(i => [i.number, i]));
 });
+
+// QBT may use the warehouse's own codes. Map a QBT line to a BC item: by item no., else by GTIN (barcode).
+async function resolveItemNo(qbtItemNo, gtin) {
+  const items = await allItems();
+  if (items.has(qbtItemNo)) return qbtItemNo;
+  if (gtin) { for (const [no, it] of items) if (it.gtin && it.gtin === gtin) return no; }
+  return qbtItemNo;
+}
+
+async function qbtFor(soNumbers) {
+  const bySo = {};
+  for (let k = 0; k < soNumbers.length; k += 15) {
+    const part = soNumbers.slice(k, k + 15);
+    const filter = part.map(n => `orderNumber eq ${lit(n)}`).join(" or ");
+    const r = await bcAll(`/qbtHeaders?$filter=${filter}&$expand=qbtLines`, { custom: true });
+    for (const h of r) {
+      const lines = [];
+      for (const l of h.qbtLines || []) lines.push({ itemNo: await resolveItemNo(l.itemNumber, l.gtin), qbtItemNo: l.itemNumber, gtin: l.gtin || "", lotNo: l.batchNumber || "", qty: l.shippingQuantity, expiry: l.expiryDate && l.expiryDate !== "0001-01-01" ? l.expiryDate : "" });
+      (bySo[h.orderNumber] = bySo[h.orderNumber] || []).push({ shipmentNo: String(h.shipmentNumber), date: h.shipmentDate, carrier: h.carrier || "", tracking: h.trackingNumber || "", completed: !!h.completed, lines });
+    }
+  }
+  return bySo;
+}
 
 async function priceGroupOf(customerNo) {
   const s = await store.getCustomerSettings().catch(() => ({}));
@@ -80,22 +103,30 @@ app.http("shipments", {
       bc("GET", `/salesInvoices?${f}$select=orderNumber&$top=200&$orderby=invoiceDate desc`)
     ]);
     const sos = [...new Set([...o.value.map(x => x.number), ...i.value.map(x => x.orderNumber)].filter(Boolean))];
-    const bySo = {};
     // QBT holds the BC sales order number in orderNumber.
-    for (let k = 0; k < sos.length; k += 15) {
-      const part = sos.slice(k, k + 15);
-      const filter = part.map(n => `orderNumber eq ${lit(n)}`).join(" or ");
-      const r = await bcAll(`/qbtHeaders?$filter=${filter}&$expand=qbtLines`, { custom: true });
-      for (const h of r) {
-        const so = h.orderNumber;
-        (bySo[so] = bySo[so] || []).push({
-          shipmentNo: String(h.shipmentNumber), date: h.shipmentDate, carrier: h.carrier || "", tracking: h.trackingNumber || "", completed: !!h.completed,
-          lines: (h.qbtLines || []).map(l => ({ itemNo: l.itemNumber, lotNo: l.batchNumber || "", qty: l.shippingQuantity, expiry: l.expiryDate && l.expiryDate !== "0001-01-01" ? l.expiryDate : "" }))
-        });
-      }
-    }
+    const bySo = await qbtFor(sos);
     return json(200, { bySo });
   })
+});
+
+// Admin lookup: what BC and QBT hold for one order (by SO no. or portal no.). Read-only.
+app.http("diag-order", {
+  route: "diag/order", methods: ["GET"], authLevel: "anonymous",
+  handler: handler(async request => {
+    const q = String(request.query.get("no") || "").trim().slice(0, 35);
+    if (!q) return json(400, { error: "Give an order number (SO… or JSH…)." });
+    const out = { searched: q };
+    const so = await bc("GET", `/salesOrders?$filter=number eq ${lit(q)} or startswith(externalDocumentNumber,${lit(q)})&$select=number,externalDocumentNumber,customerNumber,status&$expand=salesOrderLines($select=lineType,lineObjectNumber,description,quantity,shippedQuantity)`);
+    out.salesOrders = so.value;
+    const inv = await bc("GET", `/salesInvoices?$filter=orderNumber eq ${lit(q)} or startswith(externalDocumentNumber,${lit(q)})&$select=number,orderNumber,externalDocumentNumber`);
+    out.postedInvoices = inv.value;
+    const soNos = [...new Set([q, ...so.value.map(x => x.number), ...inv.value.map(x => x.orderNumber)].filter(Boolean))];
+    out.qbtSearchedFor = soNos;
+    out.qbtByOrderNumber = await bcAll(`/qbtHeaders?$filter=${soNos.map(n => `orderNumber eq ${lit(n)}`).join(" or ")}&$expand=qbtLines`, { custom: true });
+    out.qbtByWholesaleOrderNumber = await bcAll(`/qbtHeaders?$filter=${soNos.map(n => `wholeSaleOrderNumber eq ${lit(n)}`).join(" or ")}&$expand=qbtLines`, { custom: true }).catch(e => ({ error: e.message }));
+    out.portalWouldShow = await qbtFor(soNos);
+    return json(200, out);
+  }, { role: "admin" })
 });
 
 module.exports = { priceListFor, priceGroupOf };

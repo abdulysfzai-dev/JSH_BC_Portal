@@ -456,7 +456,7 @@ const Live = {
     const u = this.user; const S = Store.state;
     const cust = u.role === "customer" ? u.customerNo : (session && session.viewAs) || "";
     const q = cust && u.role === "admin" ? `?customerNo=${encodeURIComponent(cust)}` : "";
-    const [cs, pl, os, inv, sh] = await Promise.all([this.api("GET", "/customers"), cust ? this.api("GET", "/pricelist" + q) : Promise.resolve({ group: "", lines: [] }), this.api("GET", "/orders" + q), this.api("GET", "/invoices" + q), cust ? this.api("GET", "/shipments" + q).catch(() => ({ bySo: {} })) : Promise.resolve({ bySo: {} })]);
+    const [cs, pl, os, inv, sh] = await Promise.all([this.api("GET", "/customers"), cust ? this.api("GET", "/pricelist" + q) : Promise.resolve({ group: "", lines: [] }), this.api("GET", "/orders" + q), this.api("GET", "/invoices" + q), cust ? this.api("GET", "/shipments" + q).catch(e => { setTimeout(() => toast("Shipment details couldn't load: " + e.message), 800); return { bySo: {} }; }) : Promise.resolve({ bySo: {} })]);
     const addr = c => [c.addressLine1, c.addressLine2, c.city, c.state, c.postalCode].filter(Boolean).join(", ");
     S.customers = cs.value.map(c => ({ no: c.number, name: c.displayName, priceGroup: c.priceGroup || "", contact: c.displayName, email: c.email || "", phone: c.phoneNumber || "", billTo: addr(c), shipTo: addr(c), terms: "Per BC", location: "", active: !c.blocked || !String(c.blocked).trim() }));
     // Catalogue = this customer's price list only (Customer Price Group).
