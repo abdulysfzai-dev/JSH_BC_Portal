@@ -12,7 +12,7 @@
   /* Layout idea: soft pastel "wellness" canvas, glass cards, one raspberry→peach accent gradient, pastel stage colours */
   --ink:#1d1a2b; --ink-2:#5b5670; --ink-3:#8f8aa3;
   --bg:#fbf9ff; --card:rgba(255,255,255,.78); --line:#ece7f5;
-  --accent:#e6407a; --accent-2:#ff9f6e; --violet:#7a5cff;
+  --accent:#111111; --accent-2:#555555; --violet:#6b5cff; /* JSH monochrome, from the logo */
   --blush:#ffd3df; --peach:#ffe0c7; --lilac:#e3dbff; --mint:#c9f0de; --sky:#d3e8ff; --butter:#fff1b8;
   --s-sub:#f4a72b; --s-conf:#7a5cff; --s-ship:#2d9cdb; --s-inv:#e6407a; --s-paid:#1fae74;
   --display:"Sora", system-ui, sans-serif; --body:"Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -32,7 +32,7 @@ button{cursor:pointer}
 
 /* Backdrop blobs */
 .blobs{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
-.blob{position:absolute;border-radius:50%;filter:blur(60px);opacity:.75;animation:float 18s ease-in-out infinite}
+.blob{position:absolute;border-radius:50%;filter:blur(60px);opacity:.45;animation:float 18s ease-in-out infinite}
 .b1{width:520px;height:520px;background:var(--blush);top:-160px;left:-120px}
 .b2{width:460px;height:460px;background:var(--lilac);top:20%;right:-140px;animation-delay:-6s}
 .b3{width:420px;height:420px;background:var(--peach);bottom:-160px;left:25%;animation-delay:-11s}
@@ -44,7 +44,8 @@ button{cursor:pointer}
 .btn{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:10px 18px;font-weight:700;background:#fff;box-shadow:var(--shadow);transition:transform .15s,box-shadow .15s,background .15s}
 .btn:hover{transform:translateY(-1px)}
 .btn:active{transform:translateY(0)}
-.btn.primary{background:linear-gradient(120deg,var(--accent),var(--accent-2));color:#fff}
+.btn.primary{background:#111;color:#fff;letter-spacing:.02em}
+.btn.primary:hover{background:#2b2b2b}
 .btn.dark{background:var(--ink);color:#fff}
 .btn.ghost{background:transparent;box-shadow:none;border:1px solid var(--line)}
 .btn.sm{padding:6px 12px;font-size:13px}
@@ -62,7 +63,7 @@ button{cursor:pointer}
 /* Login */
 .login{min-height:100vh;display:grid;grid-template-columns:1.1fr 1fr;align-items:center;gap:40px;padding:40px clamp(16px,5vw,80px)}
 .login-hero h1{font-size:clamp(34px,5vw,58px);line-height:1.04;font-weight:800}
-.grad-text{background:linear-gradient(110deg,var(--accent),var(--accent-2) 55%,var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent;background-size:200% auto;animation:sheen 6s linear infinite}
+.grad-text{color:var(--ink);font-weight:500;letter-spacing:-.01em}
 @keyframes sheen{to{background-position:200% center}}
 .login-card{background:var(--card);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.9);border-radius:28px;padding:34px;box-shadow:var(--shadow);max-width:440px;width:100%;justify-self:center;animation:rise .6s cubic-bezier(.2,.8,.2,1)}
 .login-card form{display:grid;gap:16px}
@@ -78,6 +79,11 @@ button{cursor:pointer}
 /* Shell */
 .top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;padding:14px clamp(16px,3vw,36px);background:rgba(251,249,255,.72);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:800;font-size:18px;border:0;background:none;padding:0}
+.brand-logo{height:22px;width:auto;display:block}
+.brand-tag{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.32em;text-transform:uppercase;color:var(--ink-2);padding-left:12px;border-left:1px solid var(--line)}
+.login-logo{width:min(240px,70%);height:auto;display:block}
+.loading-logo{width:220px;height:auto;animation:breathe 1.8s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.35}50%{opacity:1}}
 .logo{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:#fff;font-size:13px;font-weight:800;background:conic-gradient(from 200deg,var(--accent),var(--accent-2),var(--violet),var(--accent));animation:spin 12s linear infinite}
 .logo span{animation:spin 12s linear infinite reverse;display:block}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -121,7 +127,7 @@ button{cursor:pointer}
 .tile .sub{font-size:12px;font-weight:600;color:var(--ink-2)}
 .tile::after{content:"";position:absolute;width:120px;height:120px;border-radius:50%;right:-40px;bottom:-40px;background:rgba(255,255,255,.35);transition:transform .4s}
 .tile:hover::after{transform:scale(1.5)}
-.t-create{background:linear-gradient(140deg,var(--accent),var(--accent-2));color:#fff}
+.t-create{background:#111;color:#fff}
 .t-create .sub{color:rgba(255,255,255,.85)}
 .t-conf{background:var(--lilac)} .t-ship{background:var(--sky)} .t-inv{background:var(--blush)} .t-paid{background:var(--mint)}
 
@@ -247,7 +253,7 @@ td.r,th.r{text-align:right}
 </head>
 <body>
 <div class="blobs" aria-hidden="true"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div></div>
-<div id="app"><div style="display:grid;place-items:center;min-height:100vh"><div class="logo" style="width:64px;height:64px;font-size:18px"><span>JSH</span></div></div></div>
+<div id="app"><div style="display:grid;place-items:center;min-height:100vh"><img class="loading-logo" src="/jsh-logo.png" alt="JSH Health Vitamins"></div></div>
 <div id="layer"></div>
 <div id="toasts" aria-live="polite"></div>
 <canvas id="confetti"></canvas>
@@ -500,7 +506,7 @@ const pno = o => o.notPortal ? "—" : o.portalNo;
 function newPortalNo() { return "JSH…"; }
 function newDraftId() { const b = new Uint8Array(12); crypto.getRandomValues(b); return [...b].map(x => x.toString(16).padStart(2, "0")).join(""); }
 async function liveSignedIn() {
-  $("#app").innerHTML = `<div style="display:grid;place-items:center;min-height:100vh;text-align:center"><div><div class="logo" style="width:64px;height:64px;font-size:18px;margin:0 auto 14px"><span>JSH</span></div><div class="muted" style="font-weight:700">Loading from Business Central…</div></div></div>`;
+  $("#app").innerHTML = `<div style="display:grid;place-items:center;min-height:100vh;text-align:center"><div><img class="loading-logo" src="/jsh-logo.png" alt="JSH Health Vitamins"><div class="muted" style="font-weight:700;margin-top:18px">Loading from Business Central…</div></div></div>`;
   try { await Live.load(); }
   catch (e) { $("#app").innerHTML = `<div style="display:grid;place-items:center;min-height:100vh;padding:20px"><div class="card" style="max-width:460px"><h2 style="font-size:20px">Couldn't load your data</h2><p class="muted">${esc(e.message)}</p><button class="btn primary" data-act="logout">Back to sign-in</button></div></div>`; return; }
   session = { userId: "live", token: Live.token, viewAs: session && session.viewAs || "" }; saveSession();
@@ -622,7 +628,7 @@ function countUp(el, to, fmt) {
 function loginView() {
   return `<div class="login">
     <div class="login-hero">
-      <div class="badge" style="display:inline-block;margin-bottom:18px">Prototype · demo data</div>
+      ${Live.on ? `<img src="/jsh-logo.png" alt="JSH Health Vitamins" style="height:34px;width:auto;display:block;margin-bottom:28px">` : `<div class="badge" style="display:inline-block;margin-bottom:18px">Prototype · demo data</div>`}
       <h1>Wholesale ordering,<br><span class="grad-text">beautifully simple.</span></h1>
       <p class="muted" style="font-size:17px;max-width:46ch;margin-top:14px">Place orders against your price list, follow them from confirmation to delivery, and keep track of invoices. Every order goes straight into Business Central.</p>
       <div class="hero-pills">
@@ -632,7 +638,7 @@ function loginView() {
       </div>
     </div>
     <div class="login-card">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px"><div class="logo"><span>JSH</span></div><div><h2 style="font-size:22px">JSH Trade Portal</h2><div class="faint" style="font-size:13px">Sign in to your account</div></div></div>
+      <div style="display:grid;justify-items:center;gap:10px;margin:6px 0 4px;text-align:center"><img class="login-logo" src="/jsh-logo.png" alt="JSH Health Vitamins"><div class="brand-tag" style="border:0;padding:0">Trade Portal</div><div class="faint" style="font-size:13px">Sign in to your account</div></div>
       <form id="loginForm" autocomplete="on" style="margin-top:18px">
         <div class="field"><label for="lu">${Live.on ? "Email" : "Username"}</label><input class="input" id="lu" name="username" autocomplete="username" required></div>
         <div class="field"><label for="lp">Password</label><input class="input" id="lp" name="password" type="password" autocomplete="current-password" required></div>
@@ -681,7 +687,7 @@ function shell(inner) {
   const nav = cust ? navC : navA;
   return `${isAdmin() && cust ? `<div class="viewas">Previewing as ${esc(c ? c.name : "")} <button data-act="exit-viewas">Back to admin</button></div>` : ""}
   <header class="top">
-    <button class="brand" data-go="${cust ? "home" : "admin-overview"}"><div class="logo"><span>JSH</span></div><span>Trade Portal</span></button>
+    <button class="brand" data-go="${cust ? "home" : "admin-overview"}" aria-label="JSH Health Vitamins Trade Portal home"><img class="brand-logo" src="/jsh-logo.png" alt="JSH Health Vitamins"><span class="brand-tag">Trade Portal</span></button>
     <span class="badge env-demo" title="Data source">${S.settings.env === "demo" ? "Demo data" : esc(S.settings.env)}</span>
     <div class="sp"></div>
     ${cust ? `<button class="btn sm ghost" data-act="sync" title="Read latest status from Business Central">${ICON.sync}<span>Refresh</span></button>` : ""}
@@ -1207,7 +1213,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#layer"
 
 /* ============ boot ============ */
 (async () => {
-  const slow = setTimeout(() => { if (!me()) $("#app").innerHTML = `<div style="display:grid;place-items:center;min-height:100vh;text-align:center"><div><div class="logo" style="width:64px;height:64px;font-size:18px;margin:0 auto 14px"><span>JSH</span></div><div class="muted" style="font-weight:700">Waking up the portal…</div><div class="faint" style="font-size:13px;margin-top:4px">First visit in a while takes a few seconds.</div></div></div>`; }, 2500);
+  const slow = setTimeout(() => { if (!me()) $("#app").innerHTML = `<div style="display:grid;place-items:center;min-height:100vh;text-align:center"><div><img class="loading-logo" src="/jsh-logo.png" alt="JSH Health Vitamins"><div class="muted" style="font-weight:700;margin-top:18px">Waking up the portal…</div><div class="faint" style="font-size:13px;margin-top:4px">First visit in a while takes a few seconds.</div></div></div>`; }, 2500);
   const on = await Live.detect(); clearTimeout(slow);
   if (on) {
     Store.state = demoState(); Store.state.orders = []; Store.state.log = []; Store.mode = "live"; Store.save = async () => {};

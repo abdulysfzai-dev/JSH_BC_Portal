@@ -36,12 +36,12 @@ function frame(title, inner) {
   return `<!DOCTYPE html><html><body style="margin:0;background:#fbf9ff;font-family:Segoe UI,Arial,sans-serif;color:#1d1a2b">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:28px 12px">
   <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #ece7f5">
-  <tr><td style="background:linear-gradient(120deg,#e6407a,#ff9f6e);background-color:#e6407a;padding:22px 28px;color:#fff;font-size:20px;font-weight:700">JSH Trade Portal</td></tr>
+  <tr><td style="padding:26px 28px 18px;border-bottom:1px solid #ece7f5">${process.env.PORTAL_URL ? `<img src="${esc(process.env.PORTAL_URL.replace(/\/$/, ""))}/jsh-logo.png" alt="JSH Health Vitamins" width="180" style="display:block;width:180px;height:auto;border:0">` : `<span style="font-size:20px;font-weight:700;letter-spacing:.2em">JSHEALTH</span>`}<div style="margin-top:8px;font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#5b5670">Trade Portal</div></td></tr>
   <tr><td style="padding:28px"><h1 style="margin:0 0 14px;font-size:22px">${esc(title)}</h1>${inner}</td></tr>
   <tr><td style="padding:16px 28px;background:#f6f3fb;color:#8f8aa3;font-size:12px">This email was sent by the JSH Trade Portal. Please don't reply to it.</td></tr>
   </table></td></tr></table></body></html>`;
 }
-const button = (href, label) => `<p style="margin:24px 0"><a href="${esc(href)}" style="background:#1d1a2b;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:700;display:inline-block">${esc(label)}</a></p><p style="font-size:12px;color:#8f8aa3;word-break:break-all">Or paste this link into your browser: ${esc(href)}</p>`;
+const button = (href, label) => `<p style="margin:24px 0"><a href="${esc(href)}" style="background:#111111;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:700;display:inline-block">${esc(label)}</a></p><p style="font-size:12px;color:#8f8aa3;word-break:break-all">Or paste this link into your browser: ${esc(href)}</p>`;
 
 const templates = {
   invite: ({ name, customerName, link }) => ({
