@@ -305,6 +305,30 @@ td.r,th.r{text-align:right}
 .trend-svg .tv{font-size:11px;font-weight:700;fill:var(--ink-2);font-variant-numeric:tabular-nums}
 .trend-svg .tl{font-size:11px;font-weight:600;fill:var(--ink-3)}
 .trend-svg .tl.cur{fill:var(--ink)}
+
+/* Create order: livelier */
+.step-h{display:flex;align-items:center;gap:10px;font-size:17px;margin-bottom:14px}
+.step-n{width:28px;height:28px;border-radius:50%;background:#111;color:#fff;display:grid;place-items:center;font:800 13px var(--display);flex:none}
+.step-n.inv{background:#fff;color:#111}
+.cat-head{background:#111;color:#fff;margin:-20px -20px 12px;padding:18px 20px 14px;border-radius:var(--r) var(--r) 0 0}
+.cat-head .input{background:#fff;border-color:#fff;color:var(--ink)}
+.scan-hint{font-size:12px;opacity:.7;margin-top:8px}
+.prod2{display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:center;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;transition:border-color .15s,background .15s,transform .15s}
+.prod2:hover{border-color:#111;transform:translateY(-1px)}
+.prod2.in{border-color:var(--s-paid);background:#f3fbf7}
+.prod2 .sw{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;font:800 11px var(--display);color:#1d1a2b;letter-spacing:.04em}
+.pinfo b{display:block;font-size:14px;line-height:1.3}
+.pinfo .meta{font-size:12px;color:var(--ink-3);margin-top:2px}
+.pinfo .mono{font-size:12px}
+.pbuy{display:grid;justify-items:end;gap:6px}
+.price{font:800 16px var(--display)}
+.add-btn{border:1.5px solid #111;background:#fff;color:#111;border-radius:999px;padding:6px 14px;font-weight:700;font-size:13px;transition:background .15s,color .15s}
+.add-btn:hover{background:#111;color:#fff}
+.prod2.in .add-btn{border-color:var(--s-paid);color:#127a50}
+.incart{color:#127a50;font-weight:700}
+.totals .grand{background:#111;color:#fff;border-radius:12px;padding:12px 14px;margin-top:6px}
+.co .card:first-child{border-top:4px solid #111}
+
 @media (max-width:1100px){.month-row{grid-template-columns:1fr 1fr}.month-row .trend{grid-column:1/-1}}
 @media (max-width:420px){.month-row{grid-template-columns:1fr}}
 
@@ -530,7 +554,7 @@ const Live = {
     const addr = c => [c.addressLine1, c.addressLine2, c.city, c.state, c.postalCode].filter(Boolean).join(", ");
     S.customers = cs.value.map(c => ({ no: c.number, name: c.displayName, priceGroup: c.priceGroup || "", contact: c.displayName, email: c.email || "", phone: c.phoneNumber || "", billTo: addr(c), shipTo: addr(c), terms: "Per BC", location: "", active: !c.blocked || !String(c.blocked).trim() }));
     // Catalogue = this customer's price list only (Customer Price Group).
-    S.items = pl.lines.map(l => ({ no: l.itemNo, desc: l.description, cat: l.category || "Other", pack: l.uom, uom: l.uom, caseQty: 1, blocked: false }));
+    S.items = pl.lines.map(l => ({ no: l.itemNo, gtin: l.gtin || "", desc: l.description, cat: l.category || "Other", pack: l.uom, uom: l.uom, caseQty: 1, blocked: false }));
     S.priceLists = pl.lines.map(l => ({ group: pl.group || "NONE", itemNo: l.itemNo, unitPrice: l.unitPrice, minQty: l.minQty, startDate: "" }));
     let custRec = S.customers.find(c => c.no === cust);
     if (!custRec && cust && u.role === "admin") { const r = await this.api("GET", "/customers?q=" + encodeURIComponent(cust)); const c = r.value.find(x => x.number === cust); if (c) { custRec = { no: c.number, name: c.displayName, priceGroup: "", contact: c.displayName, email: c.email || "", phone: c.phoneNumber || "", billTo: addr(c), shipTo: addr(c), terms: "Per BC", location: "", active: true }; S.customers.push(custRec); } }
@@ -893,7 +917,7 @@ function createView() {
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="faint" style="font-size:13px;font-weight:700">Portal order no.</span><span class="order-no" id="pno">${esc(draft.portalNo)}</span>${Live.on ? '<span class="faint" style="font-size:12px">confirmed when you submit</span>' : ""}${draft._editing ? `<span class="order-no" style="background:var(--violet)">${esc(draft.bc.soNo)}</span>` : ""}</div></div>
   <div class="co">
     <div class="grid">
-      <section class="card"><h3 style="font-size:17px;margin-bottom:14px">Order details</h3>
+      <section class="card"><h3 class="step-h"><span class="step-n">1</span>Order details</h3>
         <div class="form-grid">
           <div class="field prefill"><label for="f-cust">Customer</label><input class="input" id="f-cust" readonly value="${esc(c.no + " · " + c.name)}"></div>
           <div class="field"><label for="f-date">Order date</label><input class="input" id="f-date" type="date" readonly value="${esc(h.orderDate)}"></div>
@@ -905,37 +929,54 @@ function createView() {
           <div class="field prefill"><label for="f-terms">Payment terms</label><input class="input" id="f-terms" readonly value="${esc(h.terms)}"></div>
           <div class="field span3"><label for="f-notes">Delivery notes</label><textarea class="input" id="f-notes" data-h="notes" rows="2" maxlength="250" placeholder="Dock hours, special instructions…">${esc(h.notes)}</textarea></div>
         </div></section>
-      <section class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="font-size:17px">Order lines</h3><span class="faint" style="font-size:13px">Price list ${esc(c.priceGroup)} · prices ex GST</span></div>
+      <section class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3 class="step-h" style="margin:0"><span class="step-n">3</span>Review &amp; submit</h3><span class="faint" style="font-size:13px">Price list ${esc(c.priceGroup)} · prices ex GST</span></div>
         <div id="lines">${linesTable()}</div>
         <div class="rule" style="margin-top:14px">${ICON.shield}<span>Only items on your price list can be ordered. Your order is created in Business Central when you press <b>${draft._editing ? "Save changes" : "Submit order"}</b>, and only then.</span></div>
         <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap"><button class="btn ghost" data-act="cancel-draft">Cancel</button><button class="btn primary" id="submitBtn" data-act="submit-order" ${draft.lines.length ? "" : "disabled"}>${draft._editing ? "Save changes" : "Submit order"} →</button></div>
       </section>
     </div>
-    <aside class="card cat"><h3 style="font-size:17px">Your price list</h3><div class="faint" style="font-size:13px">${pl.length} items available to ${esc(c.name)}</div>
-      <input class="input" id="catSearch" type="search" placeholder="Search by name or item no." value="${esc(ui.catSearch)}" style="margin-top:12px" aria-label="Search items">
+    <aside class="card cat"><div class="cat-head"><h3 class="step-h" style="margin:0;color:#fff"><span class="step-n inv">2</span>Add items</h3><div style="font-size:13px;opacity:.75;margin-top:4px">${pl.length} items on your price list</div>
+      <input class="input" id="catSearch" type="search" autocomplete="off" placeholder="Search name, item no. or GTIN/EAN" value="${esc(ui.catSearch)}" style="margin-top:12px" aria-label="Search items by name, item number or GTIN/EAN">
+      <div class="scan-hint">Scan a barcode or type a GTIN/EAN and press Enter to add it</div></div>
       <div class="cat-list" id="catList">${catList(pl)}</div>
     </aside>
   </div>`;
 }
+const CAT_PALETTE = ["#ffe1ea", "#e7e0ff", "#dff1ff", "#dcf7ea", "#fff1c9", "#ffe6d6", "#e9f0ff", "#f3e3ff"];
+function catColor(cat) { let h = 0; for (const ch of String(cat || "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return CAT_PALETTE[h % CAT_PALETTE.length]; }
 function catList(pl) {
   const q = ui.catSearch.trim().toLowerCase();
-  const list = pl.filter(p => !q || (p.item.desc + " " + p.itemNo + " " + p.item.cat).toLowerCase().includes(q));
+  const list = pl.filter(p => !q || (p.item.desc + " " + p.itemNo + " " + p.item.cat + " " + (p.item.gtin || "")).toLowerCase().includes(q));
   if (!pl.length && Live.on) return `<div class="empty">Your price list isn't set up yet. Contact JSH to get ordering switched on.</div>`;
-  if (!list.length) return `<div class="empty">No items match.</div>`;
-  return list.map(p => { const inn = draft.lines.find(l => l.itemNo === p.itemNo); return `<div class="prod"><div class="sw" style="background:${CAT_COL[p.item.cat] || "#eee"}">${esc(p.item.cat.slice(0, 3).toUpperCase())}</div><div><b>${esc(p.item.desc)}</b><small class="mono">${esc(p.itemNo)}</small> <small>· ${esc(p.item.pack)} · min ${p.minQty}</small><div class="num" style="font-weight:800;margin-top:2px">${money(p.unitPrice)} <small>/ ${esc(p.item.uom)}</small></div></div><button class="add ${inn ? "in" : ""}" data-add="${esc(p.itemNo)}" aria-label="Add ${esc(p.item.desc)}">${inn ? "✓" : "+"}</button></div>`; }).join("");
+  if (!list.length) return `<div class="empty">No items match “${esc(ui.catSearch)}”.</div>`;
+  return list.map(p => { const inn = draft.lines.find(l => l.itemNo === p.itemNo);
+    return `<div class="prod2 ${inn ? "in" : ""}"><div class="sw" style="background:${catColor(p.item.cat)}">${esc(String(p.item.cat).slice(0, 4).toUpperCase())}</div>
+      <div class="pinfo"><b>${esc(p.item.desc)}</b><div class="meta"><span class="mono">${esc(p.itemNo)}</span>${p.item.gtin ? ` · EAN <span class="mono">${esc(p.item.gtin)}</span>` : ""}</div><div class="meta">${esc(p.item.uom)}${p.minQty > 1 ? ` · min ${p.minQty}` : ""}${inn ? ` · <span class="incart">✓ ${inn.qty} in order</span>` : ""}</div></div>
+      <div class="pbuy"><div class="price num">${money(p.unitPrice)}</div><button class="add-btn" data-add="${esc(p.itemNo)}" aria-label="Add ${esc(p.item.desc)}">${inn ? "+ More" : "+ Add"}</button></div></div>`; }).join("");
 }
 function linesTable() {
   if (!draft.lines.length) return `<div class="empty" style="padding:28px"><div class="big">🛒</div>Add items from your price list to start this order.</div>`;
   const t = totals(draft.lines);
   return `<div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Description</th><th>UoM</th><th>Qty</th><th class="r">Unit price</th><th class="r">Line amount</th><th></th></tr></thead><tbody>
-  ${draft.lines.map(l => `<tr style="animation:none"><td class="mono">${esc(l.itemNo)}</td><td>${esc(l.desc)}</td><td>${esc(l.uom)}</td><td><div class="qty"><button data-q="${esc(l.itemNo)}|-1" aria-label="Decrease">−</button><input inputmode="numeric" data-qi="${esc(l.itemNo)}" value="${l.qty}" aria-label="Quantity for ${esc(l.desc)}"><button data-q="${esc(l.itemNo)}|1" aria-label="Increase">+</button></div></td><td class="r num">${money(l.unitPrice)}</td><td class="r num"><b>${money(l.qty * l.unitPrice)}</b></td><td><button class="link" data-rm="${esc(l.itemNo)}" style="color:var(--s-inv)">Remove</button></td></tr>`).join("")}
+  ${draft.lines.map(l => { const it = (Store.state.items || []).find(i => i.no === l.itemNo) || {}; return `<tr style="animation:none"><td class="mono">${esc(l.itemNo)}</td><td>${esc(l.desc)}${it.gtin ? `<div class="faint mono" style="font-size:12px">EAN ${esc(it.gtin)}</div>` : ""}</td><td>${esc(l.uom)}</td><td><div class="qty"><button data-q="${esc(l.itemNo)}|-1" aria-label="Decrease">−</button><input inputmode="numeric" data-qi="${esc(l.itemNo)}" value="${l.qty}" aria-label="Quantity for ${esc(l.desc)}"><button data-q="${esc(l.itemNo)}|1" aria-label="Increase">+</button></div></td><td class="r num">${money(l.unitPrice)}</td><td class="r num"><b>${money(l.qty * l.unitPrice)}</b></td><td><button class="link" data-rm="${esc(l.itemNo)}" style="color:var(--s-inv)">Remove</button></td></tr>`; }).join("")}
   </tbody></table></div>
   <div class="totals num"><div><span class="muted">Subtotal (${t.units} units)</span><span>${money(t.sub)}</span></div><div><span class="muted">GST 10%</span><span>${money(t.gst)}</span></div><div class="grand"><span>Total</span><span>${money(t.total)}</span></div></div>`;
 }
 function refreshLines() { $("#lines").innerHTML = linesTable(); const c = customer(draft.customerNo); $("#catList").innerHTML = catList(BC.getPriceList(c.priceGroup)); $("#submitBtn").disabled = !draft.lines.length; (Live.on || Store.state.log.shift()); }
 function bindCreate() {
   document.querySelectorAll("[data-h]").forEach(el => el.addEventListener("input", () => { draft.header[el.dataset.h] = el.value; }));
-  const cs = $("#catSearch"); cs && cs.addEventListener("input", () => { ui.catSearch = cs.value; const c = customer(draft.customerNo); $("#catList").innerHTML = catList(BC.getPriceList(c.priceGroup)); (Live.on || Store.state.log.shift()); });
+  const cs = $("#catSearch");
+  cs && cs.addEventListener("keydown", e => {
+    if (e.key !== "Enter") return; e.preventDefault();
+    const v = cs.value.trim(); if (!v) return;
+    const c = customer(draft.customerNo); const pl = BC.getPriceList(c.priceGroup); (Live.on || Store.state.log.shift());
+    const norm = x => String(x || "").trim().toUpperCase();
+    let hit = pl.find(p => norm(p.item.gtin) === norm(v) || norm(p.itemNo) === norm(v));
+    if (!hit) { const q = v.toLowerCase(); const m = pl.filter(p => (p.item.desc + " " + p.itemNo + " " + (p.item.gtin || "")).toLowerCase().includes(q)); if (m.length === 1) hit = m[0]; }
+    if (!hit) { toast(`No single item on your price list matches “${v}”.`); return; }
+    addLine(hit.itemNo); cs.value = ""; ui.catSearch = ""; $("#catList").innerHTML = catList(pl); cs.focus();
+  });
+  cs && cs.addEventListener("input", () => { ui.catSearch = cs.value; const c = customer(draft.customerNo); $("#catList").innerHTML = catList(BC.getPriceList(c.priceGroup)); (Live.on || Store.state.log.shift()); });
   $("#lines").addEventListener("change", e => { const it = e.target.dataset.qi; if (!it) return; const l = draft.lines.find(x => x.itemNo === it); let v = parseInt(e.target.value, 10); if (!(v > 0)) v = 1; l.qty = Math.min(v, 9999); refreshLines(); });
 }
 function addLine(itemNo) {

@@ -61,7 +61,7 @@ async function priceListFor(customerNo) {
   }
   const lines = [...best.values()].map(l => {
     const it = items.get(l.itemNumber) || {};
-    return { itemNo: l.itemNumber, description: it.displayName || l.itemNumber, category: it.itemCategoryCode || "Other", uom: l.unitOfMeasureCode || it.baseUnitOfMeasureCode || "", unitPrice: l.unitPrice, minQty: Math.max(1, l.minimumQuantity || 0), discount: l.lineDiscountPercent || 0, blocked: !!it.blocked };
+    return { itemNo: l.itemNumber, gtin: it.gtin || "", description: it.displayName || l.itemNumber, category: it.itemCategoryCode || "Other", uom: l.unitOfMeasureCode || it.baseUnitOfMeasureCode || "", unitPrice: l.unitPrice, minQty: Math.max(1, l.minimumQuantity || 0), discount: l.lineDiscountPercent || 0, blocked: !!it.blocked };
   }).filter(l => !l.blocked).sort((a, b) => a.description.localeCompare(b.description));
   return { group, lines };
 }
