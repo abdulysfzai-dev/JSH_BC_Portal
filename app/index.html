@@ -664,14 +664,10 @@ function countUp(el, to, fmt) {
 function loginView() {
   return `<div class="login">
     <div class="login-hero">
-      ${Live.on ? `<img src="/jsh-logo.png" alt="JSH Health Vitamins" style="height:34px;width:auto;display:block;margin-bottom:28px">` : `<div class="badge" style="display:inline-block;margin-bottom:18px">Prototype · demo data</div>`}
+      <img src="/jsh-logo.png" alt="JSH Health Vitamins" style="height:34px;width:auto;display:block;margin-bottom:28px">
       <h1>Wholesale ordering,<br><span class="grad-text">beautifully simple.</span></h1>
       <p class="muted" style="font-size:17px;max-width:46ch;margin-top:14px">Place orders against your price list, follow them from confirmation to delivery, and keep track of invoices. Every order goes straight into Business Central.</p>
-      <div class="hero-pills">
-        <div class="hero-pill" style="animation-delay:.1s"><span class="dot" style="background:var(--s-conf)"></span>Live order status</div>
-        <div class="hero-pill" style="animation-delay:.2s"><span class="dot" style="background:var(--s-ship)"></span>Lot numbers on every shipment</div>
-        <div class="hero-pill" style="animation-delay:.3s"><span class="dot" style="background:var(--s-inv)"></span>Invoices in one place</div>
-      </div>
+
     </div>
     <div class="login-card">
       <div style="display:grid;justify-items:center;gap:10px;margin:6px 0 4px;text-align:center"><img class="login-logo" src="/jsh-logo.png" alt="JSH Health Vitamins"><div class="brand-tag" style="border:0;padding:0">Trade Portal</div><div class="faint" style="font-size:13px">Sign in to your account</div></div>
@@ -682,7 +678,6 @@ function loginView() {
         <button class="btn primary" type="submit" style="justify-content:center;padding:13px">Sign in</button>
         ${Live.on ? `<button type="button" class="link" data-act="forgot" style="justify-self:center">Forgot password?</button>` : ""}
       </form>
-      ${Live.on ? `<p class="faint" style="font-size:13px;margin:16px 0 0">Connected to Business Central (sandbox).</p>` : ""}
       <details style="margin-top:18px;font-size:13px;${Live.on ? "display:none" : ""}"><summary class="muted" style="cursor:pointer;font-weight:700">Prototype sign-ins</summary>
         <div class="chips" style="margin-top:10px">
           <button class="chip" data-fill="admin|Portal@Admin1" type="button">Admin · admin</button>
