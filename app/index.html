@@ -295,6 +295,19 @@ td.r,th.r{text-align:right}
 .aus-map .pulse{fill:none;stroke:#111;stroke-width:1.2}
 @media (max-width:760px){.aus-map{max-width:320px}}
 
+
+.month-row{display:grid;grid-template-columns:1fr 1fr 2fr;gap:14px;align-items:stretch}
+.trend{padding:14px 16px 8px}
+.trend-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13px;margin-bottom:4px}
+.trend-svg{width:100%;height:auto;display:block}
+.trend-svg .bar{transform-box:fill-box;transform-origin:bottom;animation:grow .7s cubic-bezier(.2,.8,.2,1) both}
+@keyframes grow{from{transform:scaleY(0)}}
+.trend-svg .tv{font-size:11px;font-weight:700;fill:var(--ink-2);font-variant-numeric:tabular-nums}
+.trend-svg .tl{font-size:11px;font-weight:600;fill:var(--ink-3)}
+.trend-svg .tl.cur{fill:var(--ink)}
+@media (max-width:1100px){.month-row{grid-template-columns:1fr 1fr}.month-row .trend{grid-column:1/-1}}
+@media (max-width:420px){.month-row{grid-template-columns:1fr}}
+
 @media (max-width:1100px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}.co{grid-template-columns:1fr}.cat{position:static;max-height:none}.kpis{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}
 @media (max-width:760px){.login{grid-template-columns:1fr}.hero{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.form-grid{grid-template-columns:1fr}.form-grid .span2{grid-column:auto}.kv{grid-template-columns:1fr 1fr}.timeline{grid-template-columns:repeat(5,minmax(52px,1fr));overflow-x:auto}.top .who .nm{display:none}}
 @media (max-width:420px){.tiles{grid-template-columns:1fr}.kpis{grid-template-columns:1fr}}
@@ -729,7 +742,7 @@ function bindLogin() {
 function shell(inner) {
   const u = me(), cust = custView(), S = Store.state;
   const c = cust ? customer(activeCustomerNo()) : null;
-  const navC = [["home", "Home"], ["create", "Create Order"], ["confirmed", "Confirmed Orders"], ["shipped", "Orders Shipped"], ["topay", "Invoices To Be Paid"], ["paid", "Invoices Paid"]];
+  const navC = [["home", "Home"], ["all", "All Orders"], ["create", "Create Order"], ["confirmed", "Confirmed Orders"], ["shipped", "Orders Shipped"], ["topay", "Invoices To Be Paid"], ["paid", "Invoices Paid"]];
   const navA = [["admin-overview", "Overview"], ["admin-orders", "Orders"], ["admin-customers", "Customers"], ["admin-items", "Items & Price Lists"], ["admin-users", "Users"], ["admin-settings", "Settings"]];
   const nav = cust ? navC : navA;
   return `${isAdmin() && cust ? `<div class="viewas">Previewing as ${esc(c ? c.name : "")} <button data-act="exit-viewas">Back to admin</button></div>` : ""}
@@ -750,6 +763,7 @@ function myOrders() { const no = activeCustomerNo(); return Store.state.orders.f
 function customerPage() {
   switch (route.page) {
     case "create": return createView();
+    case "all": return allOrdersView();
     case "confirmed": return confirmedView();
     case "shipped": return listView("shipped");
     case "topay": return invoiceView("invoiced");
@@ -767,6 +781,7 @@ function homeView() {
   const hr = new Date().getHours(); const greet = hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
   const recent = [...os].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
   const first = (isAdmin() ? c.contact : u.name).split(" ")[0];
+  const series = monthSeries(os, 6); const month = series[series.length - 1];
   const kpi = (goTo, dot, label, value, sub, attn) => `<button class="kpi-card ${attn ? "attn" : ""}" data-go="${goTo}"><span class="kpi-label"><i style="background:${dot}"></i>${label}</span><b class="num">${value}</b><span class="kpi-sub">${sub}</span><span class="kpi-go" aria-hidden="true">→</span></button>`;
   return `<div class="dash">
     <section class="dash-head">
@@ -780,17 +795,51 @@ function homeView() {
       ${kpi("topay", "var(--s-inv)", "To be paid", money(owing), `${cnt("invoiced")} invoice${cnt("invoiced") === 1 ? "" : "s"}`, overdue.length > 0)}
       ${kpi("paid", "var(--s-paid)", "Paid", cnt("paid"), "Payment history")}
     </section>
-    <section class="card plain"><div class="page-head" style="margin-bottom:4px"><h2 style="font-size:18px">Recent orders</h2><button class="btn sm" data-go="confirmed">All orders</button></div>
-      ${ordersTable(recent, false)}</section>
+    <section class="month-row">
+      ${kpi("all", "var(--ink)", "Total orders this month", month.count, monthLabel(0))}
+      ${kpi("all", "var(--ink)", "Order value this month", money(month.value), "Inc GST")}
+      <div class="card trend"><div class="trend-head"><b>Order value, last 6 months</b><span class="faint" style="font-size:12px">bars: $ · dots: orders</span></div>${trendChart(series)}</div>
+    </section>
   </div>`;
+}
+// Order value: BC's own total when we have it, else worked out from the lines.
+const orderValue = o => (o.bcTotal !== undefined && o.bcTotal !== null) ? Number(o.bcTotal) : totals(o.lines).total;
+const monthLabel = back => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - back); return d.toLocaleDateString("en-AU", { month: "long", year: "numeric" }); };
+function monthSeries(os, n) {
+  const now = new Date(); const out = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1); const key = d.getFullYear() + "-" + d.getMonth();
+    const inMonth = os.filter(o => { const c = new Date(o.createdAt); return !isNaN(c) && c.getFullYear() + "-" + c.getMonth() === key; });
+    out.push({ label: d.toLocaleDateString("en-AU", { month: "short" }), count: inMonth.length, value: inMonth.reduce((a, o) => a + orderValue(o), 0) });
+  }
+  return out;
+}
+function trendChart(series) {
+  const W = 560, H = 180, pad = { l: 8, r: 8, t: 22, b: 26 };
+  const maxV = Math.max(1, ...series.map(s => s.value)), maxC = Math.max(1, ...series.map(s => s.count));
+  const bw = (W - pad.l - pad.r) / series.length; const ih = H - pad.t - pad.b;
+  const short = v => v >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "m" : v >= 1e3 ? "$" + (v / 1e3).toFixed(1) + "k" : "$" + Math.round(v);
+  const pts = series.map((s, i) => [pad.l + bw * i + bw / 2, pad.t + ih - (s.count / maxC) * ih * .9]);
+  return `<svg class="trend-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Order value and number of orders for the last ${series.length} months">
+    <line x1="${pad.l}" x2="${W - pad.r}" y1="${pad.t + ih}" y2="${pad.t + ih}" stroke="var(--line)"/>
+    ${series.map((s, i) => { const h = Math.max(2, (s.value / maxV) * ih * .9); const x = pad.l + bw * i + bw * .22, w = bw * .56, y = pad.t + ih - h; const cur = i === series.length - 1;
+      return `<g><title>${s.label}: ${money(s.value)}, ${s.count} order${s.count === 1 ? "" : "s"}</title><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${cur ? "#111" : "#d9d4e2"}" class="bar" style="animation-delay:${i * .07}s"/><text x="${x + w / 2}" y="${y - 6}" text-anchor="middle" class="tv">${s.value ? short(s.value) : ""}</text><text x="${x + w / 2}" y="${H - 8}" text-anchor="middle" class="tl ${cur ? "cur" : ""}">${s.label}</text></g>`; }).join("")}
+    <polyline points="${pts.map(p => p.join(",")).join(" ")}" fill="none" stroke="var(--s-conf)" stroke-width="1.6" stroke-dasharray="4 4"/>
+    ${pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#fff" stroke="var(--s-conf)" stroke-width="2"><title>${series[i].count} orders</title></circle>`).join("")}
+  </svg>`;
+}
+function allOrdersView() {
+  const list = [...myOrders()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return `<div class="page-head"><div><button class="crumb" data-go="home">← Home</button><h1>All Orders</h1><p class="muted" style="margin:4px 0 0">Every order with its status. Search, or click a column heading to sort.</p></div><button class="btn primary" data-go="create">${ICON.plus.replace("<svg", '<svg width="16" height="16"')} Create order</button></div>
+  <section class="card">${ordersTable(list, true, false, true)}</section>`;
 }
 function tile(goTo, cls, icon, title, count, sub) {
   return `<button class="tile ${cls}" data-go="${goTo}"><div class="ico">${icon}</div><div><h3>${title}</h3>${count !== "" ? `<div class="count num" data-count="${count}">${count}</div>` : ""}<div class="sub">${esc(sub)}</div></div></button>`;
 }
-function ordersTable(list, withPipe, admin) {
+function ordersTable(list, withPipe, admin, withPlacer) {
   if (!list.length) return `<div class="empty"><div class="big">🌿</div>Nothing here yet.</div>`;
-  return `<div class="tbl-wrap"><table><thead><tr><th>Portal order</th><th>BC order</th>${admin ? "<th>Customer</th>" : ""}<th>Date</th><th>Your PO</th><th class="r">Units</th><th class="r">Total inc GST</th><th>Status</th>${withPipe ? "<th>Progress</th>" : ""}</tr></thead><tbody>
-  ${list.map((o, i) => { const t = totals(o.lines); return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * 0.03}s"><td class="mono"><b>${esc(pno(o))}</b></td><td class="mono">${esc(o.bc.soNo || "—")}</td>${admin ? `<td>${esc(customer(o.customerNo)?.name || o.customerNo)}</td>` : ""}<td>${dt(o.createdAt)}</td><td>${esc(o.header.customerPO || "—")}</td><td class="r num">${t.units}</td><td class="r num">${money(t.total)}</td><td>${pill(o)}</td>${withPipe ? `<td>${pipe(o)}</td>` : ""}</tr>`; }).join("")}
+  return `<div class="tbl-wrap"><table><thead><tr><th>Portal order</th><th>BC order</th>${admin ? "<th>Customer</th>" : ""}<th>Date</th><th>Your PO</th>${withPlacer ? "<th>Placed by</th>" : ""}<th class="r">Units</th><th class="r">Total inc GST</th><th>Status</th>${withPipe ? "<th>Progress</th>" : ""}</tr></thead><tbody>
+  ${list.map((o, i) => { const t = totals(o.lines); return `<tr class="click" data-open="${esc(o.portalNo)}" style="animation-delay:${i * 0.03}s"><td class="mono"><b>${esc(pno(o))}</b></td><td class="mono">${esc(o.bc.soNo || "—")}</td>${admin ? `<td>${esc(customer(o.customerNo)?.name || o.customerNo)}</td>` : ""}<td>${dt(o.createdAt)}</td><td>${esc(o.header.customerPO || "—")}</td>${withPlacer ? `<td>${esc(o.createdBy || "—")}</td>` : ""}<td class="r num">${t.units}</td><td class="r num">${money(orderValue(o))}</td><td>${pill(o)}</td>${withPipe ? `<td>${pipe(o)}</td>` : ""}</tr>`; }).join("")}
   </tbody></table></div>`;
 }
 function confirmedView() {
