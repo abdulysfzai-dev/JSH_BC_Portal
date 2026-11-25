@@ -1098,9 +1098,9 @@ async function submitOrder() {
   await Store.save();
   const saved = draft; draft = null;
   const fm = !editing;
-  openModal(`<div style="text-align:center" class="${fm ? "flight" : ""}">${fm ? `${sendAnim()}<div class="flight-cap">Sent electronically · received by JSH in Business Central</div>` : ""}<svg class="success-check" viewBox="0 0 84 84"><circle cx="42" cy="42" r="38"/><path d="M26 43l11 11 21-23"/></svg>
+  openModal(`<div style="text-align:center" class="${fm ? "flight" : ""}">${fm ? sendAnim() : ""}<svg class="success-check" viewBox="0 0 84 84"><circle cx="42" cy="42" r="38"/><path d="M26 43l11 11 21-23"/></svg>
     <h2 style="font-size:24px">${editing ? "Changes saved" : "Order submitted"}</h2>
-    <p class="muted" style="margin:6px 0 0">${editing ? "Your sales order in Business Central has been updated." : "Your order is in Business Central and waiting for JSH to confirm it."}</p>
+    <p class="muted" style="margin:6px 0 0">${editing ? "Your sales order in Business Central has been updated." : "Your order has been received by JSH. You'll get the confirmation shortly."}</p>
     <div class="link-pair"><span class="order-no">${esc(saved.portalNo)}</span><span aria-hidden="true">⇄</span><span class="order-no">${esc(saved.bc.soNo)}</span></div>
     <div class="faint" style="font-size:13px">Portal order no. ⇄ BC sales order no.</div>
     <div style="display:flex;gap:10px;justify-content:center;margin-top:20px;flex-wrap:wrap"><button class="btn ghost" data-act="close-go" data-to="confirmed">View my orders</button><button class="btn primary" data-act="close-new">Create another</button></div></div>`);
